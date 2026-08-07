@@ -13,6 +13,8 @@ import { parseSecurityPosture, type SecurityPosture } from "./security/security-
 import {
   isLocalSandboxNetworkMode,
   LOCAL_SANDBOX_NETWORK_MODES,
+  parseLocalSandboxBindMounts,
+  type LocalSandboxBindMount,
   type LocalSandboxNetworkMode,
 } from "./sandbox/sandbox.ts";
 import { slackPluginConfigFromEnv, type SlackPluginConfig } from "./slack/config.ts";
@@ -246,6 +248,8 @@ interface LocalSandboxEnv {
   image?: string;
   dockerBin?: string;
   networkMode?: LocalSandboxNetworkMode;
+  bindMounts?: LocalSandboxBindMount[];
+  userns?: string;
   cpus?: number;
   memoryMb?: number;
   defaultTimeoutSec?: number;
@@ -265,9 +269,28 @@ function localSandboxNetworkModeEnvStrict(env: NodeJS.ProcessEnv): LocalSandboxN
   return declared;
 }
 
+// Bind mounts expose live host state to sandboxed agent code, so a malformed
+// entry fails the boot instead of being skipped — silently mounting nothing is
+// the worst outcome, because the agent then reports an empty workspace and the
+// cause is invisible.
+function localSandboxBindMountsEnvStrict(env: NodeJS.ProcessEnv): LocalSandboxBindMount[] | undefined {
+  const raw = env.LOCAL_SANDBOX_BIND_MOUNTS?.trim();
+  if (!raw) return undefined;
+  try {
+    const mounts = parseLocalSandboxBindMounts(raw);
+    return mounts.length ? mounts : undefined;
+  } catch (e) {
+    throw new Error(`LOCAL_SANDBOX_BIND_MOUNTS: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
 function localSandboxEnv(env: NodeJS.ProcessEnv): LocalSandboxEnv {
   const networkMode = localSandboxNetworkModeEnvStrict(env);
+  const bindMounts = localSandboxBindMountsEnvStrict(env);
+  const userns = env.LOCAL_SANDBOX_USERNS?.trim();
   return {
+    ...(bindMounts ? { bindMounts } : {}),
+    ...(userns ? { userns } : {}),
     ...(env.LOCAL_SANDBOX_IMAGE ? { image: env.LOCAL_SANDBOX_IMAGE } : {}),
     ...(env.LOCAL_SANDBOX_DOCKER_BIN ? { dockerBin: env.LOCAL_SANDBOX_DOCKER_BIN } : {}),
     ...(networkMode ? { networkMode } : {}),

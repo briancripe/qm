@@ -35,6 +35,48 @@ export function isLocalSandboxNetworkMode(v: string): v is LocalSandboxNetworkMo
   return (LOCAL_SANDBOX_NETWORK_MODES as readonly string[]).includes(v);
 }
 
+/** A host directory exposed inside the sandbox. */
+export interface LocalSandboxBindMount {
+  hostPath: string;
+  containerPath: string;
+  readOnly: boolean;
+}
+
+/**
+ * Parse `HOST:CONTAINER[:ro|:rw]` entries, comma-separated.
+ *
+ * Bind mounts hand the sandbox live host state, so this is strict: both paths
+ * must be absolute, and a container path that would shadow the base filesystem
+ * is refused outright. Anything malformed throws at boot rather than silently
+ * mounting the wrong thing — or nothing.
+ */
+export function parseLocalSandboxBindMounts(raw: string): LocalSandboxBindMount[] {
+  const out: LocalSandboxBindMount[] = [];
+  for (const entry of raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)) {
+    const parts = entry.split(":");
+    if (parts.length < 2 || parts.length > 3) {
+      throw new Error(`bind mount ${JSON.stringify(entry)} must be HOST:CONTAINER[:ro|:rw]`);
+    }
+    const [hostPath = "", containerPath = "", mode] = parts;
+    if (!hostPath.startsWith("/") || !containerPath.startsWith("/")) {
+      throw new Error(`bind mount ${JSON.stringify(entry)}: both paths must be absolute`);
+    }
+    // Shadowing these replaces the image's own filesystem and breaks the agent
+    // in ways that surface far from the cause.
+    if (["/", "/usr", "/etc", "/bin", "/sbin", "/lib", "/var", "/opt"].includes(containerPath.replace(/\/+$/, ""))) {
+      throw new Error(`bind mount ${JSON.stringify(entry)}: refusing to mount over ${containerPath}`);
+    }
+    if (mode !== undefined && mode !== "ro" && mode !== "rw") {
+      throw new Error(`bind mount ${JSON.stringify(entry)}: mode must be "ro" or "rw"`);
+    }
+    out.push({ hostPath, containerPath, readOnly: mode === "ro" });
+  }
+  return out;
+}
+
 export interface SandboxHandle {
   id: string;
   rootDir: string;

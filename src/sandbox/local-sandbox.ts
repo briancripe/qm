@@ -22,6 +22,7 @@ import type {
   AgentComputerProfile,
   ExecOptions,
   ExecResult,
+  LocalSandboxBindMount,
   LocalSandboxNetworkMode,
   ProvisionOptions,
   Sandbox,
@@ -45,6 +46,22 @@ export interface LocalSandboxOptions {
   dockerBin?: string;
   /** Defaults to "custom" — per-sandbox network isolation. */
   networkMode?: LocalSandboxNetworkMode;
+  /**
+   * Host directories exposed inside the sandbox. Empty by default: the sandbox
+   * normally sees only its own volume, and every entry here is live host state
+   * the agent can read and (unless ro) write.
+   */
+  bindMounts?: readonly LocalSandboxBindMount[];
+  /**
+   * Passed through as `--userns=<value>` when set. Relevant only alongside
+   * bindMounts: under a normal rootless subuid mapping, container root writes
+   * land as a subuid the host user cannot read, and "keep-id" maps the caller's
+   * uid through instead. Left unset by default because it is NOT universally
+   * available — in a single-UID namespace (no setuid newuidmap) podman fails
+   * with "storage-chown-by-maps: lchown ...: invalid argument", while plain
+   * bind mounts already land as the caller's uid there.
+   */
+  userns?: string;
   cpus?: number;
   memoryMb?: number;
   defaultTimeoutSec?: number;
@@ -108,6 +125,14 @@ function localSlug(id: string): string {
 export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandboxOptions = {}): Sandbox {
   const image = opts.image ?? DEFAULT_LOCAL_SANDBOX_IMAGE;
   const networkMode: LocalSandboxNetworkMode = opts.networkMode ?? "custom";
+  const bindMounts: readonly LocalSandboxBindMount[] = opts.bindMounts ?? [];
+  const bindMountArgs = bindMounts.flatMap((m) => [
+    "-v",
+    `${m.hostPath}:${m.containerPath}${m.readOnly ? ":ro" : ""}`,
+  ]);
+  // Only meaningful with bind mounts, and only valid where the runtime can map
+  // more than one uid — see LocalSandboxOptions.userns.
+  const usernsArgs = opts.userns ? ["--userns", opts.userns] : [];
   const dexec = opts.dockerExec ?? spawnDockerExec(opts.dockerBin ?? "docker");
   const fetchImpl = opts.fetchImpl ?? fetch;
   const defaultTimeoutSec = opts.defaultTimeoutSec ?? 600;
@@ -297,6 +322,8 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
       "agent_env=dev",
       ...netArgs,
       ...(withVolume && scope ? ["-v", `${localVolumeName(scope)}:${homeDir}`] : []),
+      ...bindMountArgs,
+      ...usernsArgs,
       ...(await publishArgs()),
       "--add-host=host.docker.internal:host-gateway",
       ...(opts.cpus ? ["--cpus", String(opts.cpus)] : []),

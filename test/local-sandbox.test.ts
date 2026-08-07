@@ -341,3 +341,34 @@ test("the agent port is published on a concrete port, never the non-portable :0:
   assert.ok(host > 0 && host < 65536, `host port must be a real port, got ${host}`);
   assert.equal(Number(m![2]), 8080, "container side is the agent port");
 });
+
+// --- bind mounts ------------------------------------------------------------
+test("no bind mounts by default — the sandbox sees only its own volume", async () => {
+  const fake = installFakeDocker(daemonPort);
+  const cap = captureRun(fake);
+  const sb = makeSandbox(fake, cap.sandboxOpts);
+  await assert.rejects(sb.provision(rw(scopeId("personal", "B0"))));
+  const vols = cap.runs[0]!.filter((a, i) => cap.runs[0]![i - 1] === "-v");
+  assert.equal(vols.length, 1, "only the home volume");
+  assert.ok(vols[0]!.startsWith("qm-home-"), `expected the home volume, got ${vols[0]}`);
+  assert.equal(cap.runs[0]!.includes("--userns"), false);
+});
+
+test("bind mounts are passed through, ro is honoured, and userns is opt-in", async () => {
+  const fake = installFakeDocker(daemonPort);
+  const cap = captureRun(fake);
+  const sb = makeSandbox(fake, {
+    ...cap.sandboxOpts,
+    bindMounts: [
+      { hostPath: "/host/ws", containerPath: "/root/workspace", readOnly: false },
+      { hostPath: "/host/bh", containerPath: "/root/.beadhive", readOnly: true },
+    ],
+    userns: "keep-id",
+  });
+  await assert.rejects(sb.provision(rw(scopeId("personal", "B1"))));
+  const args = cap.runs[0]!;
+  const vols = args.filter((a, i) => args[i - 1] === "-v");
+  assert.ok(vols.includes("/host/ws:/root/workspace"), `rw mount missing: ${vols.join(" ")}`);
+  assert.ok(vols.includes("/host/bh:/root/.beadhive:ro"), `ro mount missing: ${vols.join(" ")}`);
+  assert.equal(args[args.indexOf("--userns") + 1], "keep-id");
+});
