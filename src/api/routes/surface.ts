@@ -996,7 +996,25 @@ async function getSurfaceConfig(ctx: ApiCtx): Promise<void> {
     webuiModels: configuredPicker.length ? configuredPicker : allowed,
     baseModel: resolvedBase,
     harnessId,
-    ...(managedKeys ? { modelProviderConfigured: Object.values(managedKeys).some(Boolean) } : {}),
+    // Ask "can this harness serve a model?", not "are any managed provider keys set?".
+    // Those differ for harnesses that carry their own credentials: HARNESS=claude
+    // authenticates the Claude Code child process from CLAUDE_CODE_OAUTH_TOKEN /
+    // ANTHROPIC_AUTH_TOKEN (see CLAUDE_ENV_PASSTHROUGH in harness/claude-harness.ts),
+    // which the model credential store knows nothing about. Reading managedKeys raw
+    // reported a fully working Claude-Code deployment as unconfigured, and the portal
+    // then served "This deployment isn't set up yet" — pushing the operator toward
+    // admin onboarding to add a key nothing actually needed.
+    //
+    // modelProviderAvailabilityFor already encodes this per harness, and app-turn.ts
+    // routes turn-time serviceability through it; this flag was the one place that
+    // bypassed it. pi / opencode / codex keep their existing behaviour.
+    ...(managedKeys
+      ? {
+          modelProviderConfigured: Object.values(
+            modelProviderAvailabilityFor(harnessId, deps.providerKeys ?? ALL_PROVIDERS_AVAILABLE, managedKeys),
+          ).some(Boolean),
+        }
+      : {}),
     externalSlackParticipants,
     ...(Object.keys(resolvedBranding).length ? { branding: resolvedBranding } : {}),
   });
