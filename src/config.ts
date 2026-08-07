@@ -10,6 +10,11 @@ import { parseMemoryStrategyKind, type MemoryStrategyKind } from "./memory/strat
 import { validateCoreSecretEnv } from "./deployment/secret-schema.ts";
 import { DEFAULT_CAPTURE_QUIET_MS } from "./memory/strategies/per-turn.ts";
 import { parseSecurityPosture, type SecurityPosture } from "./security/security-posture.ts";
+import {
+  isLocalSandboxNetworkMode,
+  LOCAL_SANDBOX_NETWORK_MODES,
+  type LocalSandboxNetworkMode,
+} from "./sandbox/sandbox.ts";
 import { slackPluginConfigFromEnv, type SlackPluginConfig } from "./slack/config.ts";
 import {
   MODEL_PROVIDERS,
@@ -240,15 +245,32 @@ function awsSandboxEnv(env: NodeJS.ProcessEnv): AwsSandboxEnv {
 interface LocalSandboxEnv {
   image?: string;
   dockerBin?: string;
+  networkMode?: LocalSandboxNetworkMode;
   cpus?: number;
   memoryMb?: number;
   defaultTimeoutSec?: number;
 }
 
+// Unset means "custom" — per-sandbox network isolation. Deliberately strict:
+// a typo here would silently downgrade the isolation the sandbox exists for,
+// so fail at boot rather than quietly fall back to a weaker mode.
+function localSandboxNetworkModeEnvStrict(env: NodeJS.ProcessEnv): LocalSandboxNetworkMode | undefined {
+  const declared = env.LOCAL_SANDBOX_NETWORK_MODE?.trim();
+  if (!declared) return undefined;
+  if (!isLocalSandboxNetworkMode(declared)) {
+    throw new Error(
+      `LOCAL_SANDBOX_NETWORK_MODE=${JSON.stringify(declared)} is not recognized — use ${LOCAL_SANDBOX_NETWORK_MODES.join(", ")}.`,
+    );
+  }
+  return declared;
+}
+
 function localSandboxEnv(env: NodeJS.ProcessEnv): LocalSandboxEnv {
+  const networkMode = localSandboxNetworkModeEnvStrict(env);
   return {
     ...(env.LOCAL_SANDBOX_IMAGE ? { image: env.LOCAL_SANDBOX_IMAGE } : {}),
     ...(env.LOCAL_SANDBOX_DOCKER_BIN ? { dockerBin: env.LOCAL_SANDBOX_DOCKER_BIN } : {}),
+    ...(networkMode ? { networkMode } : {}),
     ...(numEnvStrict("LOCAL_SANDBOX_CPUS", env.LOCAL_SANDBOX_CPUS) !== undefined
       ? { cpus: numEnvStrict("LOCAL_SANDBOX_CPUS", env.LOCAL_SANDBOX_CPUS) }
       : {}),

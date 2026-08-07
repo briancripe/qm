@@ -267,3 +267,63 @@ test("concurrent teardown and provision for one scope serialize (no stop of a fr
   await sb.teardown(h2);
   assert.equal(fake.containers.get(h2.id)!.running, false);
 });
+
+// --- network mode -----------------------------------------------------------
+// These assert on the argv handed to the container runtime rather than doing a
+// full provision: under "host" the agent is on AGENT_PORT rather than a mapped
+// port, so a round-trip would not reach the test daemon. Failing `run` right
+// after capture keeps the assertion precise and the test fast.
+function captureRun(fake: FakeDocker): { runs: string[][]; sandboxOpts: Record<string, unknown> } {
+  const runs: string[][] = [];
+  const inner = fake.dockerExec;
+  return {
+    runs,
+    sandboxOpts: {
+      dockerExec: async (args: string[], timeoutMs?: number) => {
+        if (args[0] === "run") {
+          runs.push(args);
+          return { code: 1, stdout: "", stderr: "captured" };
+        }
+        return inner(args, timeoutMs);
+      },
+    },
+  };
+}
+
+test("network mode defaults to custom: per-sandbox network, created and attached", async () => {
+  const fake = installFakeDocker(daemonPort);
+  const cap = captureRun(fake);
+  const sb = makeSandbox(fake, cap.sandboxOpts);
+  const scope = scopeId("personal", "N1");
+  await assert.rejects(sb.provision(rw(scope)));
+  const args = cap.runs[0]!;
+  const net = localNetworkName(localContainerName(scope));
+  assert.equal(args[args.indexOf("--network") + 1], net, "attaches to its own network");
+  assert.equal(fake.networks.has(net), true, "creates that network");
+  assert.equal(args.includes("-p"), true, "still publishes the agent port");
+});
+
+test("network mode 'default' omits --network entirely and creates no network", async () => {
+  const fake = installFakeDocker(daemonPort);
+  const cap = captureRun(fake);
+  const sb = makeSandbox(fake, { ...cap.sandboxOpts, networkMode: "default" });
+  const scope = scopeId("personal", "N2");
+  await assert.rejects(sb.provision(rw(scope)));
+  const args = cap.runs[0]!;
+  assert.equal(args.includes("--network"), false);
+  assert.equal(fake.networks.size, 0, "no per-sandbox network is created");
+  assert.equal(args.includes("-p"), true, "the agent port is still published");
+});
+
+test("network mode 'host' uses the host namespace and publishes nothing", async () => {
+  const fake = installFakeDocker(daemonPort);
+  const cap = captureRun(fake);
+  const sb = makeSandbox(fake, { ...cap.sandboxOpts, networkMode: "host" });
+  const scope = scopeId("personal", "N3");
+  await assert.rejects(sb.provision(rw(scope)));
+  const args = cap.runs[0]!;
+  assert.equal(args[args.indexOf("--network") + 1], "host");
+  assert.equal(fake.networks.size, 0, "no per-sandbox network is created");
+  // -p with host networking is rejected by the runtime, not merely redundant.
+  assert.equal(args.includes("-p"), false, "must not publish a port under host networking");
+});

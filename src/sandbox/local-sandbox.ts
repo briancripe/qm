@@ -21,6 +21,7 @@ import type {
   AgentComputerProfile,
   ExecOptions,
   ExecResult,
+  LocalSandboxNetworkMode,
   ProvisionOptions,
   Sandbox,
   SandboxHandle,
@@ -41,6 +42,8 @@ export type { DockerExec };
 export interface LocalSandboxOptions {
   image?: string;
   dockerBin?: string;
+  /** Defaults to "custom" — per-sandbox network isolation. */
+  networkMode?: LocalSandboxNetworkMode;
   cpus?: number;
   memoryMb?: number;
   defaultTimeoutSec?: number;
@@ -90,6 +93,7 @@ function localSlug(id: string): string {
 
 export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandboxOptions = {}): Sandbox {
   const image = opts.image ?? DEFAULT_LOCAL_SANDBOX_IMAGE;
+  const networkMode: LocalSandboxNetworkMode = opts.networkMode ?? "custom";
   const dexec = opts.dockerExec ?? spawnDockerExec(opts.dockerBin ?? "docker");
   const fetchImpl = opts.fetchImpl ?? fetch;
   const defaultTimeoutSec = opts.defaultTimeoutSec ?? 600;
@@ -144,6 +148,9 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
   }
 
   async function resolvePort(name: string): Promise<number> {
+    // Host networking publishes nothing, so `port` reports no mapping and would
+    // throw below. The agent is reachable on AGENT_PORT directly.
+    if (networkMode === "host") return AGENT_PORT;
     const cached = portByName.get(name);
     if (cached) return cached;
     const r = await dexec(["port", name, `${AGENT_PORT}/tcp`]);
@@ -236,8 +243,21 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
     return net;
   }
 
+  /** Only "custom" owns a network; the other modes have nothing to create or remove. */
+  async function networkArgs(name: string): Promise<string[]> {
+    if (networkMode === "host") return ["--network", "host"];
+    if (networkMode === "default") return [];
+    return ["--network", await ensureNetwork(name)];
+  }
+
+  // Under "host" the container shares the host namespace, so the agent is already
+  // on AGENT_PORT and there is no mapping to make. Passing -p as well is rejected
+  // outright (podman: "parsing host port: port numbers must be between 1 and
+  // 65535"), so it must be omitted rather than merely redundant.
+  const publishArgs = (): string[] => (networkMode === "host" ? [] : ["-p", `127.0.0.1:0:${AGENT_PORT}`]);
+
   async function runContainer(name: string, scope: string | undefined, withVolume: boolean): Promise<void> {
-    const net = await ensureNetwork(name);
+    const netArgs = await networkArgs(name);
     const args = [
       "run",
       "-d",
@@ -250,11 +270,9 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
       `qm.org=${configOrgId()}`,
       "--label",
       "agent_env=dev",
-      "--network",
-      net,
+      ...netArgs,
       ...(withVolume && scope ? ["-v", `${localVolumeName(scope)}:${homeDir}`] : []),
-      "-p",
-      `127.0.0.1:0:${AGENT_PORT}`,
+      ...publishArgs(),
       "--add-host=host.docker.internal:host-gateway",
       ...(opts.cpus ? ["--cpus", String(opts.cpus)] : []),
       ...(opts.memoryMb ? ["--memory", `${opts.memoryMb}m`] : []),
@@ -456,9 +474,10 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
           for (const [k, name] of scratchByKey) if (name === handle.id) scratchByKey.delete(k);
           if (tdOpts?.destroy) await dexec(["rm", "-f", handle.id]);
           else await dexec(["rm", "-f", handle.id]).catch(swallowAs("local-sandbox: scratch rm", undefined));
-          await dexec(["network", "rm", localNetworkName(handle.id)]).catch(
-            swallowAs("local-sandbox: scratch network rm", undefined),
-          );
+          if (networkMode === "custom")
+            await dexec(["network", "rm", localNetworkName(handle.id)]).catch(
+              swallowAs("local-sandbox: scratch network rm", undefined),
+            );
           portByName.delete(handle.id);
           return;
         }
@@ -467,9 +486,10 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
 
         if (tdOpts?.destroy) {
           await dexec(["rm", "-f", handle.id]).catch(swallowAs("local-sandbox: destroy rm", undefined));
-          await dexec(["network", "rm", localNetworkName(handle.id)]).catch(
-            swallowAs("local-sandbox: destroy network rm", undefined),
-          );
+          if (networkMode === "custom")
+            await dexec(["network", "rm", localNetworkName(handle.id)]).catch(
+              swallowAs("local-sandbox: destroy network rm", undefined),
+            );
           const scope = scopeByContainer.get(handle.id);
           if (scope)
             await dexec(["volume", "rm", localVolumeName(scope)]).catch(

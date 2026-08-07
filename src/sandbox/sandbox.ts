@@ -1,5 +1,40 @@
 import type { EgressPolicy, WorkspaceLayer } from "../types.ts";
 
+/**
+ * How a local sandbox container is attached to the network.
+ *
+ * - "custom"  (default) one bridge network per sandbox, so sandboxes cannot
+ *             reach each other. This is the isolation the sandbox exists for.
+ * - "default" the runtime's default bridge, shared with every other container.
+ *             Sandboxes can reach each other; the agent port is still published
+ *             on 127.0.0.1 only.
+ * - "host"    the host's own network namespace. No isolation, and only ONE
+ *             sandbox can run at a time — every container binds the agent port
+ *             directly, so a second one fails with "address already in use".
+ *
+ * The non-default modes exist for runtimes that cannot create or join a custom
+ * network. Rootless podman in a single-UID user namespace is the motivating
+ * case: `run --network <name>` there fails with
+ *   netavark: setns: IO error: Operation not permitted (os error 1)
+ * which happens when newuidmap is not setuid, so podman cannot map a subuid
+ * range and falls back to a single-UID namespace.
+ *
+ * Prefer "custom". Reach for the others only when the runtime forces it, and
+ * note that "host" gives up the network boundary between sandboxed agent code
+ * and everything else on the machine.
+ *
+ * This lives here rather than in local-sandbox.ts because config.ts validates it
+ * at boot, and local-sandbox.ts already imports config.ts — declaring it there
+ * would turn that into a runtime import cycle.
+ */
+export type LocalSandboxNetworkMode = "custom" | "default" | "host";
+
+export const LOCAL_SANDBOX_NETWORK_MODES: readonly LocalSandboxNetworkMode[] = ["custom", "default", "host"];
+
+export function isLocalSandboxNetworkMode(v: string): v is LocalSandboxNetworkMode {
+  return (LOCAL_SANDBOX_NETWORK_MODES as readonly string[]).includes(v);
+}
+
 export interface SandboxHandle {
   id: string;
   rootDir: string;
