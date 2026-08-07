@@ -35,6 +35,37 @@ export function isLocalSandboxNetworkMode(v: string): v is LocalSandboxNetworkMo
   return (LOCAL_SANDBOX_NETWORK_MODES as readonly string[]).includes(v);
 }
 
+/**
+ * Parse `KEY=VALUE` entries, comma-separated, into sandbox environment.
+ *
+ * Values may contain `=` (only the first is the separator) but NOT commas —
+ * that is the entry separator and there is no escape. Duplicate keys throw
+ * rather than last-wins, because a duplicate is nearly always a typo and
+ * silently discarding one of them is hard to notice.
+ *
+ * Keys are rejected unless they look like environment variable names, so a
+ * malformed entry surfaces at boot instead of becoming a variable the agent
+ * can never read.
+ */
+export function parseLocalSandboxEnv(raw: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const entry of raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)) {
+    const eq = entry.indexOf("=");
+    if (eq < 1) throw new Error(`env entry ${JSON.stringify(entry)} must be KEY=VALUE`);
+    const key = entry.slice(0, eq).trim();
+    const value = entry.slice(eq + 1);
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+      throw new Error(`env entry ${JSON.stringify(entry)}: ${JSON.stringify(key)} is not a valid variable name`);
+    }
+    if (key in out) throw new Error(`env key ${JSON.stringify(key)} is set more than once`);
+    out[key] = value;
+  }
+  return out;
+}
+
 /** A host directory exposed inside the sandbox. */
 export interface LocalSandboxBindMount {
   hostPath: string;

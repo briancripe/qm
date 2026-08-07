@@ -372,3 +372,19 @@ test("bind mounts are passed through, ro is honoured, and userns is opt-in", asy
   assert.ok(vols.includes("/host/bh:/root/.beadhive:ro"), `ro mount missing: ${vols.join(" ")}`);
   assert.equal(args[args.indexOf("--userns") + 1], "keep-id");
 });
+
+test("LOCAL_SANDBOX_ENV entries reach the container as -e, none by default", async () => {
+  const bare = installFakeDocker(daemonPort);
+  const capBare = captureRun(bare);
+  await assert.rejects(makeSandbox(bare, capBare.sandboxOpts).provision(rw(scopeId("personal", "E0"))));
+  assert.equal(capBare.runs[0]!.includes("-e"), false, "no env by default");
+
+  const fake = installFakeDocker(daemonPort);
+  const cap = captureRun(fake);
+  const sb = makeSandbox(fake, { ...cap.sandboxOpts, env: { GIT_WORKSPACE: "/root/git", FOO: "a=b" } });
+  await assert.rejects(sb.provision(rw(scopeId("personal", "E1"))));
+  const args = cap.runs[0]!;
+  const envs = args.filter((a, i) => args[i - 1] === "-e");
+  assert.ok(envs.includes("GIT_WORKSPACE=/root/git"), `missing GIT_WORKSPACE: ${envs.join(" ")}`);
+  assert.ok(envs.includes("FOO=a=b"), "a value containing = survives intact");
+});

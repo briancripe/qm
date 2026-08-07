@@ -14,6 +14,7 @@ import {
   isLocalSandboxNetworkMode,
   LOCAL_SANDBOX_NETWORK_MODES,
   parseLocalSandboxBindMounts,
+  parseLocalSandboxEnv,
   type LocalSandboxBindMount,
   type LocalSandboxNetworkMode,
 } from "./sandbox/sandbox.ts";
@@ -250,6 +251,7 @@ interface LocalSandboxEnv {
   networkMode?: LocalSandboxNetworkMode;
   bindMounts?: LocalSandboxBindMount[];
   userns?: string;
+  env?: Record<string, string>;
   cpus?: number;
   memoryMb?: number;
   defaultTimeoutSec?: number;
@@ -284,13 +286,28 @@ function localSandboxBindMountsEnvStrict(env: NodeJS.ProcessEnv): LocalSandboxBi
   }
 }
 
+// Same rationale as bind mounts: a malformed entry that silently vanished would
+// leave the agent reading an unset variable with no clue why.
+function localSandboxEnvVarsStrict(env: NodeJS.ProcessEnv): Record<string, string> | undefined {
+  const raw = env.LOCAL_SANDBOX_ENV?.trim();
+  if (!raw) return undefined;
+  try {
+    const vars = parseLocalSandboxEnv(raw);
+    return Object.keys(vars).length ? vars : undefined;
+  } catch (e) {
+    throw new Error(`LOCAL_SANDBOX_ENV: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
 function localSandboxEnv(env: NodeJS.ProcessEnv): LocalSandboxEnv {
   const networkMode = localSandboxNetworkModeEnvStrict(env);
   const bindMounts = localSandboxBindMountsEnvStrict(env);
   const userns = env.LOCAL_SANDBOX_USERNS?.trim();
+  const sandboxEnv = localSandboxEnvVarsStrict(env);
   return {
     ...(bindMounts ? { bindMounts } : {}),
     ...(userns ? { userns } : {}),
+    ...(sandboxEnv ? { env: sandboxEnv } : {}),
     ...(env.LOCAL_SANDBOX_IMAGE ? { image: env.LOCAL_SANDBOX_IMAGE } : {}),
     ...(env.LOCAL_SANDBOX_DOCKER_BIN ? { dockerBin: env.LOCAL_SANDBOX_DOCKER_BIN } : {}),
     ...(networkMode ? { networkMode } : {}),

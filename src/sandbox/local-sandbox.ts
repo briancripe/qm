@@ -62,6 +62,12 @@ export interface LocalSandboxOptions {
    * bind mounts already land as the caller's uid there.
    */
   userns?: string;
+  /**
+   * Extra environment for the sandbox container. Applied on top of the image's
+   * own ENV, so a key set here wins — overriding HOME or PATH will break the
+   * agent in ways that surface far from the cause.
+   */
+  env?: Readonly<Record<string, string>>;
   cpus?: number;
   memoryMb?: number;
   defaultTimeoutSec?: number;
@@ -133,6 +139,7 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
   // Only meaningful with bind mounts, and only valid where the runtime can map
   // more than one uid — see LocalSandboxOptions.userns.
   const usernsArgs = opts.userns ? ["--userns", opts.userns] : [];
+  const envArgs = Object.entries(opts.env ?? {}).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
   const dexec = opts.dockerExec ?? spawnDockerExec(opts.dockerBin ?? "docker");
   const fetchImpl = opts.fetchImpl ?? fetch;
   const defaultTimeoutSec = opts.defaultTimeoutSec ?? 600;
@@ -324,6 +331,7 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
       ...(withVolume && scope ? ["-v", `${localVolumeName(scope)}:${homeDir}`] : []),
       ...bindMountArgs,
       ...usernsArgs,
+      ...envArgs,
       ...(await publishArgs()),
       "--add-host=host.docker.internal:host-gateway",
       ...(opts.cpus ? ["--cpus", String(opts.cpus)] : []),
