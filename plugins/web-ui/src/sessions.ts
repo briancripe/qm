@@ -10,6 +10,7 @@ import {
   ChevronRight,
   Cog,
   EllipsisVertical,
+  Boxes,
   Folder,
   Hash,
   Link,
@@ -313,9 +314,11 @@ function recentItem(item: RecentItem): TemplateResult {
   if (item.groupKind === "personal") glyph = User;
   else if (item.groupKind === "channel") glyph = Hash;
   else if (item.groupKind === "group") glyph = Users;
+  else if (item.groupKind === "beadhive-group") glyph = Boxes;
   let fallbackName = "Project";
   if (item.groupKind === "channel") fallbackName = "Channel";
   else if (item.groupKind === "group") fallbackName = "Group DM";
+  else if (item.groupKind === "beadhive-group") fallbackName = "Beadhive group";
   const name = item.name ?? fallbackName;
   const childrenId = `recent-${item.scopeId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   const menuKey = projectMenuKey(item.scopeId);

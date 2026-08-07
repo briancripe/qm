@@ -88,7 +88,7 @@ import type { Environment, EnvironmentAttachment, EnvironmentStore } from "../en
 import type { ModelProviderAvailability } from "../model/pi-models.ts";
 import type { RuntimeChoice } from "../harness/harness-router.ts";
 import { type ReachOpts, type ReachResolution, type ReachTarget } from "../reach/reach.ts";
-import { type Project, type ProjectStore } from "../projects/project-store.ts";
+import { type Project, type ProjectBeadhiveOrigin, type ProjectStore } from "../projects/project-store.ts";
 
 interface DeploymentVersionView {
   version: number;
@@ -269,7 +269,7 @@ export interface App {
   ): Promise<SessionBackgroundOutput | null>;
   listContexts(principalId: string): Promise<ContextSummary[]>;
   listProjects(principalId: string): Promise<ProjectView[]>;
-  createProject(principalId: string, name: string): Promise<ProjectView | null>;
+  createProject(principalId: string, name: string, beadhive?: ProjectBeadhiveOrigin): Promise<ProjectView | null>;
   addProjectMember(id: string, principalId: string, memberId: string): Promise<ProjectViewMutation>;
   removeProjectMember(id: string, principalId: string, memberId: string): Promise<ProjectViewMutation>;
   renameProject(id: string, principalId: string, name: string): Promise<ProjectViewMutation>;

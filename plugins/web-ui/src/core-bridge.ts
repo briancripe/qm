@@ -94,10 +94,17 @@ export interface CoreContext {
   project?: CoreProject;
 }
 
+export interface CoreProjectBeadhiveOrigin {
+  provider: string;
+  org: string;
+}
+
 export interface CoreProject {
   id: string;
   name: string;
   ownerId: string;
+  /** Present when this project stands for a Beadhive group rather than an ad-hoc one. */
+  beadhive?: CoreProjectBeadhiveOrigin;
   memberIds: string[];
   scopeId: string;
   members: Array<{ principalId: string; displayName: string }>;

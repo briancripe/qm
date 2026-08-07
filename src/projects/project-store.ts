@@ -8,6 +8,20 @@ import { createKeyedQueue } from "../util/async.ts";
 
 const PROJECT_GROUP_PREFIX = "web-project-";
 
+/**
+ * Identifies a project that stands for a Beadhive group rather than an ad-hoc
+ * one someone made in the UI. The tuple is git-workspace's provider entry —
+ * org-scoped, and already the unit repos are grouped by on disk — so it is both
+ * the marker and the identity a reconciler matches on.
+ *
+ * Optional, and projects live in a DurableMap rather than a fixed schema, so
+ * records written before this existed simply lack it.
+ */
+export interface ProjectBeadhiveOrigin {
+  provider: string;
+  org: string;
+}
+
 export interface Project {
   id: string;
   orgId: string;
@@ -16,6 +30,7 @@ export interface Project {
   memberIds: string[];
   createdAt: number;
   updatedAt: number;
+  beadhive?: ProjectBeadhiveOrigin;
 }
 
 type ProjectMutation =
@@ -25,7 +40,7 @@ type ProjectMutation =
 type ProjectMutationEffect = (result: Extract<ProjectMutation, { status: "ok" }>) => Promise<void>;
 
 export interface ProjectStore {
-  create(input: { name: string; ownerId: string }): Promise<Project>;
+  create(input: { name: string; ownerId: string; beadhive?: ProjectBeadhiveOrigin }): Promise<Project>;
   get(id: string): Promise<Project | null>;
   listForMember(principalId: string): Promise<Project[]>;
   addMember(id: string, actorId: string, memberId: string, effect?: ProjectMutationEffect): Promise<ProjectMutation>;
@@ -147,6 +162,7 @@ export function createProjectStore(
         memberIds: [input.ownerId],
         createdAt: at,
         updatedAt: at,
+        ...(input.beadhive ? { beadhive: input.beadhive } : {}),
       };
       const stored = await backing.putIfAbsent(project.id, project);
       if (stored.createdAt !== project.createdAt || stored.ownerId !== project.ownerId)

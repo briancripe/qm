@@ -444,3 +444,32 @@ test("a plain group context with no sessions stays hidden", () => {
   const items = groupProjectSessions([], [{ scopeId: "group:shared-x", name: "shared", kind: "group" }]);
   assert.deepEqual(items, [], "only project-kind seeds render empty");
 });
+
+test("a beadhive-backed project seeds as its own kind, not a plain project", () => {
+  const seeds = recentProjectSeeds([
+    {
+      scopeId: "group:web-project-bh",
+      kind: "group",
+      name: "beadhive",
+      project: { id: "bh", name: "beadhive", beadhive: { provider: "github", org: "beadhive" } },
+    },
+    {
+      scopeId: "group:web-project-plain",
+      kind: "group",
+      name: "hand-made",
+      project: { id: "plain", name: "hand-made" },
+    },
+  ] as never);
+  assert.equal(seeds[0]!.kind, "beadhive-group");
+  assert.equal(seeds[1]!.kind, "project", "a project without the marker is unchanged");
+});
+
+test("a beadhive group renders when empty, like a project and unlike a group", () => {
+  const items = groupProjectSessions(
+    [],
+    [{ scopeId: "group:web-project-bh", name: "beadhive", kind: "beadhive-group" }],
+  );
+  assert.equal(items.length, 1, "must survive the empty-seed tail");
+  assert.equal(items[0]!.kind, "project");
+  assert.equal((items[0] as { groupKind: string }).groupKind, "beadhive-group", "kind reaches the renderer");
+});

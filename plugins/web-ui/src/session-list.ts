@@ -2,7 +2,7 @@ import { sharedContextLabel, type CoreContext, type CoreProject, type CoreSessio
 
 type ProjectAwareContext = CoreContext & { project?: CoreProject };
 
-type RecentGroupKind = "personal" | "project" | "channel" | "group";
+type RecentGroupKind = "personal" | "project" | "beadhive-group" | "channel" | "group";
 
 export interface RecentProjectSeed {
   scopeId: string;
@@ -39,7 +39,13 @@ export function chatBrowseStatusMatches(
 export function recentProjectSeeds(contexts: readonly ProjectAwareContext[]): RecentProjectSeed[] {
   return contexts.map((context): RecentProjectSeed => {
     if (context.project)
-      return { scopeId: context.scopeId, name: context.project.name.trim() || null, kind: "project" };
+      return {
+        scopeId: context.scopeId,
+        name: context.project.name.trim() || null,
+        // A Beadhive group is still a project — it renders when empty, unlike a
+        // plain group — but it is labelled apart from one someone made by hand.
+        kind: context.project.beadhive ? "beadhive-group" : "project",
+      };
     if (context.kind === "personal") return { scopeId: context.scopeId, name: "Personal", kind: "personal" };
     if (context.kind === "group")
       return { scopeId: context.scopeId, name: sharedContextLabel(context.scopeId, context.name), kind: "group" };

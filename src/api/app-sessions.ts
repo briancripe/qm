@@ -249,10 +249,10 @@ export function createSessionMethods(
       return projectsForViewer(principalId);
     },
 
-    async createProject(principalId, name) {
+    async createProject(principalId, name, beadhive) {
       const principal = deps.identity.classify(principalId);
       if (!deps.projects || !deps.identity.isInternal(principal) || !name.trim()) return null;
-      const project = await deps.projects.create({ name, ownerId: principalId });
+      const project = await deps.projects.create({ name, ownerId: principalId, ...(beadhive ? { beadhive } : {}) });
       deps.auditLog.record({
         at: Date.now(),
         principalId,
