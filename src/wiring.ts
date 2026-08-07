@@ -242,7 +242,12 @@ import {
 import { createAdminService, bootAdminGrantSeed, type AdminService } from "./admin/admin-service.ts";
 import { createAdminGrantStore, createMapAdminGrantPersistence, type AdminGrant } from "./admin/admin-grant-store.ts";
 import { createPostgresAdminGrantStore } from "./admin/postgres-admin-grant-store.ts";
-import { createProjectStore, type Project, type ProjectStore } from "./projects/project-store.ts";
+import {
+  createProjectStore,
+  projectIdFromGroupRef,
+  type Project,
+  type ProjectStore,
+} from "./projects/project-store.ts";
 import { createErrorLog, type ErrorLog } from "./admin/error-log.ts";
 import { createMemoryReplayDedupe, createPostgresReplayDedupe, type ReplayDedupe } from "./auth/replay-dedupe.ts";
 import { createAwsRoleBroker, type AwsRoleBroker } from "./auth/aws-role-broker.ts";
@@ -411,6 +416,13 @@ export function buildApp(
   const advisoryLock: AdvisoryLock = pgArtifactMap
     ? createPostgresAdvisoryLock(pgArtifactMap.pool)
     : createMemoryAdvisoryLock();
+
+  // Created here rather than beside the other scope helpers so the
+  // resolution service below can ask which Beadhive group a scope is.
+  const projects = createProjectStore(artifactMap<Project>("projects"), {
+    isActiveMember: (principalId) => identity.isInternal(identity.classify(principalId)),
+    advisoryLock,
+  });
   const configStore = createMemoryConfigStore(config.orgId, {
     connectorClients: artifactMap<StoredConnectorClient>("connector_clients"),
     souls: artifactMap<PersistedSoul>("soul_configs"),
@@ -528,7 +540,19 @@ export function buildApp(
     config.databaseUrl && (config.budgetUsdPerWindow !== undefined || config.orgBudgetUsdPerWindow !== undefined)
       ? createPostgresBudgetTracker(config.databaseUrl, budgetOpts)
       : createBudgetTracker(budgetOpts);
-  const resolution = createResolutionService(config.orgId, configStore, acl);
+  const resolution = createResolutionService(config.orgId, configStore, acl, {
+    // A group scope only stands for a Beadhive group when its project records
+    // one; everything else resolves to null and the prompt is untouched.
+    beadhiveGroupFor: async (scope) => {
+      if (!scope.startsWith("group:")) return null;
+      const id = projectIdFromGroupRef(scope.slice("group:".length));
+      if (!id) return null;
+      return (await projects.get(id))?.beadhive ?? null;
+    },
+    // The sandbox's GIT_WORKSPACE, not this host's — they differ by mount mode,
+    // and naming the host's would point the agent at a path it does not have.
+    beadhiveWorkspacePath: () => config.localSandbox.env?.GIT_WORKSPACE,
+  });
 
   const workspace = createLocalWorkspaceStore(config.dataDir);
   const blobTransfer: BlobTransferStore =
@@ -807,10 +831,6 @@ export function buildApp(
       errors.record({ category: "memory", code: "capture_failed", message: errMessage(e), scopeLabel: scope }),
   });
   const directory = config.databaseUrl ? createPostgresDirectoryStore(config.databaseUrl) : createDirectoryStore();
-  const projects = createProjectStore(artifactMap<Project>("projects"), {
-    isActiveMember: (principalId) => identity.isInternal(identity.classify(principalId)),
-    advisoryLock,
-  });
   const canReadScope = createCanReadScope({ managedGroups: projects, directory, identity, sessions });
   const canWriteScope = createCanWriteScope({ managedGroups: projects, directory, identity });
   const canManageScope = createCanManageScope({ managedGroups: projects, directory, identity, sessions });
