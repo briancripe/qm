@@ -411,3 +411,36 @@ test("conversationBackground: null when the conversation has nothing running, or
     "nothing mounted",
   );
 });
+
+// A project created through POST /v1/projects comes back from /api/contexts with
+// kind "group" — the same kind the empty-seed tail in groupProjectSessions skips.
+// It renders anyway because recentProjectSeeds checks context.project FIRST and
+// remaps to "project". Anything reordering those checks would silently stop
+// freshly-created projects appearing until someone started a session in them.
+test("a project context seeds as kind project despite arriving as kind group", () => {
+  const seeds = recentProjectSeeds([
+    {
+      scopeId: "group:web-project-abc",
+      kind: "group",
+      name: "kind-probe",
+      project: { id: "abc", name: "kind-probe" },
+    },
+  ] as never);
+  assert.equal(seeds[0]!.kind, "project", "context.project must win over kind: group");
+  assert.equal(seeds[0]!.name, "kind-probe");
+});
+
+test("a project with no sessions still renders in Recents", () => {
+  const items = groupProjectSessions(
+    [],
+    [{ scopeId: "group:web-project-abc", name: "kind-probe", kind: "project" }],
+  );
+  assert.equal(items.length, 1, "a session-less project must still produce a row");
+  assert.equal(items[0]!.kind, "project");
+  assert.deepEqual((items[0] as { sessions: unknown[] }).sessions, []);
+});
+
+test("a plain group context with no sessions stays hidden", () => {
+  const items = groupProjectSessions([], [{ scopeId: "group:shared-x", name: "shared", kind: "group" }]);
+  assert.deepEqual(items, [], "only project-kind seeds render empty");
+});
