@@ -26,7 +26,7 @@ RUN case "$TARGETARCH" in \
     esac \
   && curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${TARGETARCH}.tar.gz" -o /tmp/gh.tgz \
   && echo "$GH_SHA  /tmp/gh.tgz" | sha256sum -c - \
-  && tar xzf /tmp/gh.tgz -C /tmp \
+  && tar --no-same-owner -xzf /tmp/gh.tgz -C /tmp \
   && install "/tmp/gh_${GH_VERSION}_linux_${TARGETARCH}/bin/gh" /usr/local/bin/gh \
   && rm -rf /tmp/gh* \
   && gh --version \
