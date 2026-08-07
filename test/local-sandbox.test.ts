@@ -327,3 +327,17 @@ test("network mode 'host' uses the host namespace and publishes nothing", async 
   // -p with host networking is rejected by the runtime, not merely redundant.
   assert.equal(args.includes("-p"), false, "must not publish a port under host networking");
 });
+
+test("the agent port is published on a concrete port, never the non-portable :0:", async () => {
+  const fake = installFakeDocker(daemonPort);
+  const cap = captureRun(fake);
+  const sb = makeSandbox(fake, cap.sandboxOpts);
+  await assert.rejects(sb.provision(rw(scopeId("personal", "N4"))));
+  const args = cap.runs[0]!;
+  const spec = args[args.indexOf("-p") + 1]!;
+  const m = spec.match(/^127\.0\.0\.1:(\d+):(\d+)$/);
+  assert.ok(m, `publish spec should bind loopback to a concrete port, got ${spec}`);
+  const host = Number(m![1]);
+  assert.ok(host > 0 && host < 65536, `host port must be a real port, got ${host}`);
+  assert.equal(Number(m![2]), 8080, "container side is the agent port");
+});

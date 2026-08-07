@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { createServer } from "node:net";
 import { orgId as configOrgId } from "../config.ts";
 import { arch } from "node:os";
 import { join } from "node:path";
@@ -52,6 +53,19 @@ export interface LocalSandboxOptions {
   dockerExec?: DockerExec;
   fetchImpl?: typeof fetch;
   onError?: (e: { category: string; code: string; message: string; scopeLabel?: string }) => void;
+}
+
+/** Ask the kernel for a free loopback port, then hand it back. */
+async function pickFreeLoopbackPort(): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
+    const s = createServer();
+    s.once("error", reject);
+    s.listen(0, "127.0.0.1", () => {
+      const addr = s.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      s.close(() => (port ? resolve(port) : reject(new Error("could not resolve a free loopback port"))));
+    });
+  });
 }
 
 const FINGERPRINT_FIXED_SOURCES = ["fly/Dockerfile", "local/Dockerfile", "aws/microvm-agent/agent.mjs"];
@@ -254,7 +268,18 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
   // on AGENT_PORT and there is no mapping to make. Passing -p as well is rejected
   // outright (podman: "parsing host port: port numbers must be between 1 and
   // 65535"), so it must be omitted rather than merely redundant.
-  const publishArgs = (): string[] => (networkMode === "host" ? [] : ["-p", `127.0.0.1:0:${AGENT_PORT}`]);
+  //
+  // Otherwise publish on a port we choose rather than `:0:`. Docker reads 0 as
+  // "pick a free one", but podman rejects it outright with that same message, so
+  // the ephemeral form is not portable. The kernel still does the choosing —
+  // binding port 0 and reading back the assignment — we just resolve it here
+  // instead of in the runtime. `docker port` remains the source of truth after
+  // the run, so a lost race surfaces as a normal bind failure rather than a
+  // silently wrong port.
+  async function publishArgs(): Promise<string[]> {
+    if (networkMode === "host") return [];
+    return ["-p", `127.0.0.1:${await pickFreeLoopbackPort()}:${AGENT_PORT}`];
+  }
 
   async function runContainer(name: string, scope: string | undefined, withVolume: boolean): Promise<void> {
     const netArgs = await networkArgs(name);
@@ -272,7 +297,7 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
       "agent_env=dev",
       ...netArgs,
       ...(withVolume && scope ? ["-v", `${localVolumeName(scope)}:${homeDir}`] : []),
-      ...publishArgs(),
+      ...(await publishArgs()),
       "--add-host=host.docker.internal:host-gateway",
       ...(opts.cpus ? ["--cpus", String(opts.cpus)] : []),
       ...(opts.memoryMb ? ["--memory", `${opts.memoryMb}m`] : []),
