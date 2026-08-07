@@ -7,9 +7,22 @@ FROM debian:12-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbf
 
 ARG DEBIAN_FRONTEND=noninteractive
 
+# openssh-client's postinst runs `chgrp ssh /usr/bin/ssh-agent` unless a
+# statoverride already claims that path. Claiming it first keeps the install
+# working where gid `ssh` cannot be mapped — rootless podman in a single-UID
+# user namespace, where the chgrp fails with "Invalid argument" and takes the
+# whole image build down with it.
+#
+# The cost is that ssh-agent is not setgid ssh. That protects an agent's keys
+# from being ptraced by other processes of the same user; in a single-user
+# sandbox container there is no such other user, and nothing here runs
+# ssh-agent. ssh itself is unaffected.
+RUN dpkg-statoverride --add root root 0755 /usr/bin/ssh-agent
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
       bash coreutils findutils grep sed gawk \
       git curl wget jq unzip \
+      openssh-client \
       nftables \
       python3 python3-venv python3-pip \
       ca-certificates gnupg \
