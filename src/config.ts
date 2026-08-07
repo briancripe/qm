@@ -252,6 +252,7 @@ interface LocalSandboxEnv {
   bindMounts?: LocalSandboxBindMount[];
   userns?: string;
   env?: Record<string, string>;
+  agentPort?: number;
   cpus?: number;
   memoryMb?: number;
   defaultTimeoutSec?: number;
@@ -308,6 +309,9 @@ function localSandboxEnv(env: NodeJS.ProcessEnv): LocalSandboxEnv {
     ...(bindMounts ? { bindMounts } : {}),
     ...(userns ? { userns } : {}),
     ...(sandboxEnv ? { env: sandboxEnv } : {}),
+    ...(numEnvStrict("LOCAL_SANDBOX_AGENT_PORT", env.LOCAL_SANDBOX_AGENT_PORT) !== undefined
+      ? { agentPort: numEnvStrict("LOCAL_SANDBOX_AGENT_PORT", env.LOCAL_SANDBOX_AGENT_PORT) }
+      : {}),
     ...(env.LOCAL_SANDBOX_IMAGE ? { image: env.LOCAL_SANDBOX_IMAGE } : {}),
     ...(env.LOCAL_SANDBOX_DOCKER_BIN ? { dockerBin: env.LOCAL_SANDBOX_DOCKER_BIN } : {}),
     ...(networkMode ? { networkMode } : {}),

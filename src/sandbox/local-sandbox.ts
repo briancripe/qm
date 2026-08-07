@@ -33,7 +33,7 @@ import type {
 const DEFAULT_LOCAL_SANDBOX_IMAGE = "qm-sandbox-local:latest";
 const HOME_DIR = "/root";
 const WORKSPACE_BASENAME = "workspace";
-const AGENT_PORT = 8080;
+const DEFAULT_AGENT_PORT = 8080;
 const RO_LAYERS_TAR = ".ro-layers.tar";
 const RO_LAYERS_MANIFEST = ".ro-layers.manifest";
 const FINGERPRINT_LABEL = "qm.sandbox-fingerprint";
@@ -68,6 +68,15 @@ export interface LocalSandboxOptions {
    * agent in ways that surface far from the cause.
    */
   env?: Readonly<Record<string, string>>;
+  /**
+   * Port the in-container exec daemon listens on. Defaults to 8080.
+   *
+   * Worth moving only under host networking, where the container binds this
+   * on the host directly and so collides with anything already using 8080.
+   * The value is passed to the agent as AGENT_PORT, which agent.mjs reads, so
+   * both ends stay in step.
+   */
+  agentPort?: number;
   cpus?: number;
   memoryMb?: number;
   defaultTimeoutSec?: number;
@@ -139,7 +148,13 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
   // Only meaningful with bind mounts, and only valid where the runtime can map
   // more than one uid — see LocalSandboxOptions.userns.
   const usernsArgs = opts.userns ? ["--userns", opts.userns] : [];
-  const envArgs = Object.entries(opts.env ?? {}).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
+  const agentPort = opts.agentPort ?? DEFAULT_AGENT_PORT;
+  // AGENT_PORT last so the container always agrees with what we resolve to,
+  // even if someone also names it in `env`.
+  const envArgs = Object.entries({ ...(opts.env ?? {}), AGENT_PORT: String(agentPort) }).flatMap(([k, v]) => [
+    "-e",
+    `${k}=${v}`,
+  ]);
   const dexec = opts.dockerExec ?? spawnDockerExec(opts.dockerBin ?? "docker");
   const fetchImpl = opts.fetchImpl ?? fetch;
   const defaultTimeoutSec = opts.defaultTimeoutSec ?? 600;
@@ -195,11 +210,11 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
 
   async function resolvePort(name: string): Promise<number> {
     // Host networking publishes nothing, so `port` reports no mapping and would
-    // throw below. The agent is reachable on AGENT_PORT directly.
-    if (networkMode === "host") return AGENT_PORT;
+    // throw below. The agent is reachable on the agent port directly.
+    if (networkMode === "host") return agentPort;
     const cached = portByName.get(name);
     if (cached) return cached;
-    const r = await dexec(["port", name, `${AGENT_PORT}/tcp`]);
+    const r = await dexec(["port", name, `${agentPort}/tcp`]);
     const m = r.stdout
       .split("\n")[0]
       ?.trim()
@@ -297,7 +312,7 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
   }
 
   // Under "host" the container shares the host namespace, so the agent is already
-  // on AGENT_PORT and there is no mapping to make. Passing -p as well is rejected
+  // on the agent port and there is no mapping to make. Passing -p as well is rejected
   // outright (podman: "parsing host port: port numbers must be between 1 and
   // 65535"), so it must be omitted rather than merely redundant.
   //
@@ -310,7 +325,7 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
   // silently wrong port.
   async function publishArgs(): Promise<string[]> {
     if (networkMode === "host") return [];
-    return ["-p", `127.0.0.1:${await pickFreeLoopbackPort()}:${AGENT_PORT}`];
+    return ["-p", `127.0.0.1:${await pickFreeLoopbackPort()}:${agentPort}`];
   }
 
   async function runContainer(name: string, scope: string | undefined, withVolume: boolean): Promise<void> {

@@ -377,7 +377,9 @@ test("LOCAL_SANDBOX_ENV entries reach the container as -e, none by default", asy
   const bare = installFakeDocker(daemonPort);
   const capBare = captureRun(bare);
   await assert.rejects(makeSandbox(bare, capBare.sandboxOpts).provision(rw(scopeId("personal", "E0"))));
-  assert.equal(capBare.runs[0]!.includes("-e"), false, "no env by default");
+  const bareEnvs = capBare.runs[0]!.filter((a, i) => capBare.runs[0]![i - 1] === "-e");
+  // AGENT_PORT is always passed so the container and the resolver agree; nothing else is.
+  assert.deepEqual(bareEnvs, ["AGENT_PORT=8080"], "only the agent port by default");
 
   const fake = installFakeDocker(daemonPort);
   const cap = captureRun(fake);
@@ -387,4 +389,26 @@ test("LOCAL_SANDBOX_ENV entries reach the container as -e, none by default", asy
   const envs = args.filter((a, i) => args[i - 1] === "-e");
   assert.ok(envs.includes("GIT_WORKSPACE=/root/git"), `missing GIT_WORKSPACE: ${envs.join(" ")}`);
   assert.ok(envs.includes("FOO=a=b"), "a value containing = survives intact");
+});
+
+test("the agent port is configurable and the container is told the same value", async () => {
+  const fake = installFakeDocker(daemonPort);
+  const cap = captureRun(fake);
+  const sb = makeSandbox(fake, { ...cap.sandboxOpts, agentPort: 8099 });
+  await assert.rejects(sb.provision(rw(scopeId("personal", "P1"))));
+  const args = cap.runs[0]!;
+  const envs = args.filter((a, i) => args[i - 1] === "-e");
+  assert.ok(envs.includes("AGENT_PORT=8099"), `container not told the port: ${envs.join(" ")}`);
+  const spec = args[args.indexOf("-p") + 1]!;
+  assert.ok(spec.endsWith(":8099"), `publish should target the agent port, got ${spec}`);
+});
+
+test("an explicit AGENT_PORT in env cannot desync the container from the resolver", async () => {
+  const fake = installFakeDocker(daemonPort);
+  const cap = captureRun(fake);
+  const sb = makeSandbox(fake, { ...cap.sandboxOpts, agentPort: 8099, env: { AGENT_PORT: "1234" } });
+  await assert.rejects(sb.provision(rw(scopeId("personal", "P2"))));
+  const envs = cap.runs[0]!.filter((a, i) => cap.runs[0]![i - 1] === "-e");
+  assert.ok(envs.includes("AGENT_PORT=8099"), "agentPort wins");
+  assert.equal(envs.includes("AGENT_PORT=1234"), false, "the stray value must not survive");
 });
