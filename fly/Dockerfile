@@ -3,7 +3,7 @@ RUN npm install -g --allow-scripts=@anthropic-ai/claude-code \
       @anthropic-ai/claude-code@2.1.210 \
       @openai/codex@0.144.4
 
-FROM debian:12-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818
+FROM debian:13-slim@sha256:3a39a0592364683e6bab97937b72cad5a8fa6dcbbee90edb3bb48c7f8e94f258
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -23,6 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       bash coreutils findutils grep sed gawk \
       git curl wget jq unzip \
       openssh-client \
+      procps \
       nftables \
       python3 python3-venv python3-pip \
       ca-certificates gnupg \
