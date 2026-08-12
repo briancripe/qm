@@ -53,6 +53,8 @@ export const beadhiveState = {
   trayOpen: false,
   trayLoading: false,
   expanded: new Set<string>(),
+  collapsedGroups: new Set<string>(),
+  showAllGroups: false,
   selectedId: "",
   notice: "",
   busy: false,
@@ -61,6 +63,8 @@ export const beadhiveState = {
 export function resetBeadhiveState(): void {
   beadhiveState.snapshot = null;
   beadhiveState.expanded = new Set<string>();
+  beadhiveState.collapsedGroups = new Set<string>();
+  beadhiveState.showAllGroups = false;
   beadhiveState.selectedId = "";
   beadhiveState.trayOpen = false;
   beadhiveState.trayLoading = false;

@@ -13,6 +13,9 @@ import {
 } from "./state";
 import { buildTaskTree, countStates, descendantCount, findTask, type TaskNode } from "./tree";
 import { dispatchToChat } from "./dispatch";
+import { activeGroupKey, filterToGroup, groupSourcesByProject } from "./scope";
+import { contextsState } from "../contexts";
+import { mainConversation } from "../conversations";
 
 const STATE_LABEL: Record<string, string> = {
   needs_review: "needs review",
@@ -180,6 +183,33 @@ function detailPane(item: WorkItem): TemplateResult {
   `;
 }
 
+function showEverything(): void {
+  beadhiveState.showAllGroups = true;
+  drawHiveTray();
+}
+
+function projectSection(group: { key: string; sources: WorkSource[] }): TemplateResult {
+  const collapsed = beadhiveState.collapsedGroups.has(group.key);
+  const total = group.sources.reduce((sum, s) => sum + s.total, 0);
+  return html`<section class="bh-project">
+    <button
+      class="bh-project-head"
+      type="button"
+      aria-expanded=${collapsed ? "false" : "true"}
+      @click=${() => {
+        if (collapsed) beadhiveState.collapsedGroups.delete(group.key);
+        else beadhiveState.collapsedGroups.add(group.key);
+        drawHiveTray();
+      }}
+    >
+      ${icon(collapsed ? ChevronRight : ChevronDown, 13)}
+      <span class="bh-project-name">${group.key}</span>
+      <span class="bh-source-count">${total}</span>
+    </button>
+    ${collapsed ? nothing : group.sources.map(sourceBlock)}
+  </section>`;
+}
+
 function trayBody(): TemplateResult {
   const snapshot = beadhiveState.snapshot;
   if (!snapshot) {
@@ -191,8 +221,21 @@ function trayBody(): TemplateResult {
   if (!snapshot.sources.length) {
     return html`<div class="bh-tray-empty">No work sources are registered in this scope.</div>`;
   }
-  const needsReview = snapshot.sources.flatMap((s) => buildTaskTree(s.items).needsReview);
+  const active = beadhiveState.showAllGroups
+    ? null
+    : activeGroupKey(mainConversation().state.scopeId, contextsState.list);
+  const { shown, hiddenGroups } = filterToGroup(groupSourcesByProject(snapshot.sources), active);
+  const visible = shown.flatMap((g) => g.sources);
+  const needsReview = visible.flatMap((s) => buildTaskTree(s.items).needsReview);
   return html`
+    ${
+      active && hiddenGroups
+        ? html`<div class="bh-tray-filter">
+            Showing ${active} only ·
+            <button class="bh-link" type="button" @click=${() => void showEverything()}>show all</button>
+          </div>`
+        : nothing
+    }
     ${
       needsReview.length
         ? html`<section class="bh-source bh-needs-you">
@@ -204,7 +247,7 @@ function trayBody(): TemplateResult {
           </section>`
         : nothing
     }
-    <div class="bh-tray-body">${snapshot.sources.map(sourceBlock)}</div>
+    <div class="bh-tray-body">${shown.map(projectSection)}</div>
   `;
 }
 
