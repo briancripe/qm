@@ -1,0 +1,39 @@
+{
+  "id": "bd",
+  "label": "Beads",
+  "advertise": "bd",
+  "hints": [
+    "`bd` is the bead store underneath Beadhive: issues chained together with first-class dependencies. Prefer the `bh work` verbs for anything in a bead's lifecycle — reach for `bd` directly only for reads and for fields `bh` does not wrap.",
+    "Useful read-only verbs: `bd list`, `bd show <id>`, `bd ready`, `bd search <text>`, `bd query`, `bd status`, `bd children <id>`, `bd history <id>`, `bd gate list`.",
+    "Dependencies are the point: `bd dep tree <id>` and `bd blocked` explain why a bead is not ready. A bead is ready only when every dependency is closed and no gate blocks it.",
+    "Gates are async wait conditions. A `human` gate closes only by explicit resolution — that is the human-in-the-loop mechanism, not an obstacle to route around.",
+    "Record findings as you go with `bd note <id>` and `bd comment <id>`; they are durable and cheap."
+  ],
+  "approvals": [
+    {
+      "pattern": "\\bbd\\b\\s+delete\\b",
+      "decision": "deny",
+      "reason": "Destroys beads and rewrites references to them. Work is closed or abandoned through the lifecycle, never deleted."
+    },
+    {
+      "pattern": "\\bbd\\b\\s+gate\\s+resolve\\b",
+      "decision": "require_approval",
+      "reason": "Closes an async gate. Human gates exist precisely to hold work until a person decides; resolving one is that person's call."
+    },
+    {
+      "pattern": "\\bbd\\b\\s+close\\b",
+      "decision": "require_approval",
+      "reason": "Closing a bead directly bypasses the review-and-merge lifecycle that `bh work` enforces."
+    },
+    {
+      "pattern": "\\bbd\\b\\s+merge-slot\\b",
+      "decision": "require_approval",
+      "reason": "The merge slot serializes integration across the hive. Taking or releasing it out of band breaks that serialization."
+    },
+    {
+      "pattern": "\\bbd\\b\\s+reclaim\\b",
+      "decision": "require_approval",
+      "reason": "Reverts other workers' in_progress beads on the assumption their lease is stale — it can yank live work away."
+    }
+  ]
+}

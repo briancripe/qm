@@ -1,0 +1,66 @@
+{
+  "id": "bh",
+  "label": "Beadhive",
+  "advertise": "bh",
+  "hints": [
+    "Beadhive (`bh`) is the integration-plane driver for Beadflow: work is tracked as beads and driven bead-by-bead from assigned to merged. Drive the lifecycle with `bh work` verbs — never with raw `git`, `bd`, or `gh`.",
+    "Read before acting: `bh work ready` lists unblocked, dependency-ordered work; `bh work issue <id>` shows one bead; `bh work brief <id>` prints its requirements plus the hive's validation command.",
+    "The normal worker loop is `bh work claim <id>` (provisions a worktree and flips the bead to in_progress), edit inside that worktree, `bh work check <id>` (runs the hive's validation), then `bh work submit <id>` (opens the review gate). `submit` is a handoff, not 'done'.",
+    "`bh work merge <id>` is the merge owner's step and only works on an approved bead. Never merge a bead whose review gate is unresolved.",
+    "An epic is driven as a molecule: `bh work start <epic>` provisions the container branch, `bh work schedule <epic>` prints the dispatch plan, and `bh work finish <epic>` lands the whole molecule as one --no-ff bubble.",
+    "`bh hive ready` reports whether a repo is onboarded as a hive; `bh doctor` prints providers, orgs, and warnings.",
+    "If a tool problem blocks you, `bh escalate '<msg>'` files it upward and returns immediately — it never blocks your turn."
+  ],
+  "approvals": [
+    {
+      "pattern": "\\bbh\\b\\s+work\\s+merge\\b",
+      "decision": "require_approval",
+      "reason": "Lands a bead on the always-green integration branch. Merging is the merge owner's serialized step and is not cheaply reversible."
+    },
+    {
+      "pattern": "\\bbh\\b\\s+work\\s+finish\\b",
+      "decision": "require_approval",
+      "reason": "Lands an entire assembled molecule up one level as a single --no-ff bubble."
+    },
+    {
+      "pattern": "\\bbh\\b\\s+work\\s+approve\\b",
+      "decision": "require_approval",
+      "reason": "Resolves a bead's HUMAN review gate. An agent must not clear the gate that exists to put a human in the loop on its own work."
+    },
+    {
+      "pattern": "\\bbh\\b\\s+work\\s+submit\\b",
+      "decision": "require_approval",
+      "reason": "Hands the bead to review and, when the gate is out-of-process, pushes the branch to the remote."
+    },
+    {
+      "pattern": "\\bbh\\b\\s+contrib\\b",
+      "decision": "require_approval",
+      "reason": "The contribution plane writes outbound to an upstream project — issues and changes leave this organization."
+    },
+    {
+      "pattern": "\\bbh\\b\\s+hq\\s+push\\b",
+      "decision": "require_approval",
+      "reason": "Writes the durable central Head Office store shared by the whole fleet."
+    },
+    {
+      "pattern": "\\bbh\\b\\s+sync\\b",
+      "decision": "require_approval",
+      "reason": "Rebuilds the hub across every registered hive, cloning and mutating working copies."
+    },
+    {
+      "pattern": "\\bbh\\b\\s+hive\\s+onboard\\b",
+      "decision": "require_approval",
+      "reason": "Commissions a repository as a hive and writes its config — a one-way setup step."
+    },
+    {
+      "pattern": "\\bbh\\b\\s+config\\s+set\\b",
+      "decision": "require_approval",
+      "reason": "Changes hive or fleet configuration underneath every other seat."
+    },
+    {
+      "pattern": "\\bbh\\b\\s+host\\s+retire\\b",
+      "decision": "deny",
+      "reason": "Irreversibly removes a host from the fleet roster in Head Office. This is an operator action; an agent has no business running it."
+    }
+  ]
+}
