@@ -141,10 +141,7 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
   const image = opts.image ?? DEFAULT_LOCAL_SANDBOX_IMAGE;
   const networkMode: LocalSandboxNetworkMode = opts.networkMode ?? "custom";
   const bindMounts: readonly LocalSandboxBindMount[] = opts.bindMounts ?? [];
-  const bindMountArgs = bindMounts.flatMap((m) => [
-    "-v",
-    `${m.hostPath}:${m.containerPath}${m.readOnly ? ":ro" : ""}`,
-  ]);
+  const bindMountArgs = bindMounts.flatMap((m) => ["-v", `${m.hostPath}:${m.containerPath}${m.readOnly ? ":ro" : ""}`]);
   // Only meaningful with bind mounts, and only valid where the runtime can map
   // more than one uid — see LocalSandboxOptions.userns.
   const usernsArgs = opts.userns ? ["--userns", opts.userns] : [];

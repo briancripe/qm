@@ -16,10 +16,7 @@ import type { ProjectBeadhiveOrigin } from "./project-store.ts";
  * that does not exist inside its container. Omitted when unknown rather than
  * guessed.
  */
-export function renderBeadhiveGroupBlock(
-  origin: ProjectBeadhiveOrigin,
-  workspacePath?: string,
-): string {
+export function renderBeadhiveGroupBlock(origin: ProjectBeadhiveOrigin, workspacePath?: string): string {
   const group = `${origin.provider}/${origin.org}`;
   const lines = [
     "## Beadhive group",

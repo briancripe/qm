@@ -42,9 +42,7 @@ const keyOf = (o: ProjectBeadhiveOrigin): string => `${o.provider}/${o.org}`;
  *
  * Projects without an origin are ad-hoc and ignored entirely.
  */
-export async function reconcileBeadhiveProjects(
-  opts: BeadhiveReconcileOptions,
-): Promise<BeadhiveReconcileResult> {
+export async function reconcileBeadhiveProjects(opts: BeadhiveReconcileOptions): Promise<BeadhiveReconcileResult> {
   const existing = await opts.list();
   const byKey = new Map<string, Project>();
   for (const project of existing) {
