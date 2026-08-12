@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   activityOf,
   applySessionState,
+  isAbandonedNewChat,
   bumpActivity,
   chatBrowseStatusMatches,
   clearWorking,
@@ -472,4 +473,38 @@ test("a beadhive group renders when empty, like a project and unlike a group", (
   assert.equal(items.length, 1, "must survive the empty-seed tail");
   assert.equal(items[0]!.kind, "project");
   assert.equal((items[0] as { groupKind: string }).groupKind, "beadhive-group", "kind reaches the renderer");
+});
+
+test("an untouched new chat is abandoned when you navigate away", () => {
+  const base = {
+    threadRef: "web:alice:t1",
+    nextThreadRef: "web:alice:t2",
+    sessionId: null,
+    pendingSend: null,
+    hasHumanMessage: false,
+    draft: "",
+    attachments: 0,
+  };
+  assert.equal(isAbandonedNewChat(base), true);
+  assert.equal(isAbandonedNewChat({ ...base, nextThreadRef: null }), true, "leaving the chats view abandons it too");
+});
+
+test("a new chat with anything worth keeping is not abandoned", () => {
+  const base = {
+    threadRef: "web:alice:t1",
+    nextThreadRef: "web:alice:t2",
+    sessionId: null,
+    pendingSend: null,
+    hasHumanMessage: false,
+    draft: "",
+    attachments: 0,
+  };
+  assert.equal(isAbandonedNewChat({ ...base, draft: "half-typed thought" }), false, "draft");
+  assert.equal(isAbandonedNewChat({ ...base, draft: "   " }), true, "whitespace-only draft doesn't count");
+  assert.equal(isAbandonedNewChat({ ...base, attachments: 1 }), false, "attachment");
+  assert.equal(isAbandonedNewChat({ ...base, hasHumanMessage: true }), false, "already spoke");
+  assert.equal(isAbandonedNewChat({ ...base, pendingSend: "web:alice:t1" }), false, "send in flight");
+  assert.equal(isAbandonedNewChat({ ...base, sessionId: "s1" }), false, "saved session");
+  assert.equal(isAbandonedNewChat({ ...base, nextThreadRef: "web:alice:t1" }), false, "remounting the same chat");
+  assert.equal(isAbandonedNewChat({ ...base, threadRef: null }), false, "no chat mounted");
 });

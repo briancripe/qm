@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -9,7 +9,7 @@ import {
   type AgentSession,
 } from "@earendil-works/pi-coding-agent";
 import { InMemoryCredentialStore, type Api, type Model } from "@earendil-works/pi-ai";
-import { CONFIG_DEFAULTS, type Config } from "../config.ts";
+import { baseModelProviders, CONFIG_DEFAULTS, type Config } from "../config.ts";
 
 type LegacyThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 const LEGACY_THINKING_LEVELS = new Set<string>(["off", "minimal", "low", "medium", "high", "xhigh"]);
@@ -41,6 +41,7 @@ import {
   DEFAULT_AGENT_MODEL_ID,
   auxiliaryModelFor,
   auxiliaryModelForProvider,
+  defaultModelForHarness,
   defaultInteractiveThinkingLevel,
   modelDisplayName,
   resolveModel,
@@ -48,6 +49,7 @@ import {
   modelSupportsFastMode,
   contextTokenBudgetForModel,
 } from "../model/pi-models.ts";
+import { customModelsJson, customProvidersVersion } from "../model/custom-providers.ts";
 import {
   defineHarness,
   type Harness,
@@ -102,8 +104,11 @@ export interface PiHarnessOptions {
 }
 
 export function piHarnessConfigOptions(config: Config): PiHarnessOptions {
+  const defaultModelId =
+    config.modelId ??
+    (config.modelProvider ? defaultModelForHarness("pi", undefined, baseModelProviders(config)) : undefined);
   return {
-    ...(config.modelId ? { defaultModelId: config.modelId } : {}),
+    ...(defaultModelId ? { defaultModelId } : {}),
     ...(config.detectModelId ? { detectModelId: config.detectModelId } : {}),
     ...(config.titleModelId ? { titleModelId: config.titleModelId } : {}),
     ...(config.judgeModelId ? { judgeModelId: config.judgeModelId } : {}),
@@ -975,17 +980,40 @@ export interface ProviderKeys {
   anthropic?: string;
   openai?: string;
   openrouter?: string;
+  /** Admin-registered custom providers, keyed by provider slug. */
+  [provider: string]: string | undefined;
+}
+
+// buildModelRuntime runs per turn; the models.json only changes when the
+// custom-provider registry does, so cache the materialized file per registry
+// version instead of leaking a temp dir per turn.
+let cachedCustomModels: { version: number; path: string | null } | null = null;
+function customModelsPath(): string | null {
+  const version = customProvidersVersion();
+  if (cachedCustomModels?.version === version) return cachedCustomModels.path;
+  const custom = customModelsJson();
+  let path: string | null = null;
+  if (custom) {
+    path = join(mkdtempSync(join(tmpdir(), "pi-custom-models-")), "models.json");
+    writeFileSync(path, JSON.stringify(custom));
+  }
+  cachedCustomModels = { version, path };
+  return path;
 }
 
 async function buildModelRuntime(keys: ProviderKeys | string): Promise<ModelRuntime> {
   const k: ProviderKeys = typeof keys === "string" ? { anthropic: keys } : keys;
+  // Custom providers must exist in the runtime's own registry — a runtime
+  // API key alone is invisible to its availability checks. models.json is
+  // the sanctioned vocabulary, so materialize one when any are registered.
+  const modelsPath = customModelsPath();
   const runtime = await ModelRuntime.create({
     credentials: new InMemoryCredentialStore(),
-    modelsPath: null,
+    modelsPath,
   });
-  if (k.anthropic) await runtime.setRuntimeApiKey("anthropic", k.anthropic, { allowNetwork: false });
-  if (k.openai) await runtime.setRuntimeApiKey("openai", k.openai, { allowNetwork: false });
-  if (k.openrouter) await runtime.setRuntimeApiKey("openrouter", k.openrouter, { allowNetwork: false });
+  for (const [provider, apiKey] of Object.entries(k)) {
+    if (apiKey) await runtime.setRuntimeApiKey(provider, apiKey, { allowNetwork: false });
+  }
   return runtime;
 }
 
@@ -1208,8 +1236,7 @@ export function createPiHarness(opts?: PiHarnessOptions): Harness {
     ...configuredProviderKeys,
     ...(await opts?.resolveProviderKeys?.()),
   });
-  const keyForModel = (keys: ProviderKeys, model: Model<Api>): string | undefined =>
-    keys[model.provider as keyof ProviderKeys];
+  const keyForModel = (keys: ProviderKeys, model: Model<Api>): string | undefined => keys[String(model.provider)];
   const captureRequests = opts?.captureRequests ?? true;
   const systemCacheSplit = opts?.systemCacheSplit ?? false;
   const scratchExec = opts?.scratchExec ?? false;
@@ -2005,21 +2032,13 @@ export function createPiHarness(opts?: PiHarnessOptions): Harness {
 
       async generateTitle(transcript: string): Promise<string | undefined> {
         if (!transcript.trim()) return undefined;
-        try {
-          const model = getRequiredModel(titleModelId());
-          const providerKeys = await resolveProviderKeys();
-          if (!keyForModel(providerKeys, model)) return undefined;
-          const out = await oneShot(
-            "pi-title",
-            model,
-            providerKeys,
-            TITLE_GENERATION_PROMPT,
-            transcript.slice(0, 4000),
-          );
-          return sanitizeTitle(out);
-        } catch {
-          return undefined;
+        const model = getRequiredModel(titleModelId());
+        const providerKeys = await resolveProviderKeys();
+        if (!keyForModel(providerKeys, model)) {
+          throw new Error(`Missing ${model.provider} credential for title model ${model.id}`);
         }
+        const out = await oneShot("pi-title", model, providerKeys, TITLE_GENERATION_PROMPT, transcript.slice(0, 4000));
+        return sanitizeTitle(out);
       },
 
       async summarizeApproval(command: string, reason: string, purpose?: string): Promise<string | undefined> {
