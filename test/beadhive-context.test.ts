@@ -36,3 +36,17 @@ test("it does not restate what the deployment layer already advertises", () => {
     assert.ok(!block.includes(owned), `"${owned}" belongs to the deployment layer's hints, not here`);
   }
 });
+
+test("the block tells an un-onboarded computer how to onboard, not just where to look", () => {
+  const block = renderBeadhiveGroupBlock({ provider: "github", org: "briancripe" }, "/home/bees/workspace");
+  assert.match(block, /never been onboarded/, "an empty workspace needs a recovery path, not just a path");
+  assert.match(block, /bh hive migrate-storage/, "the migration is the step a fresh clone cannot skip");
+  assert.match(block, /bh hq init/);
+  assert.match(block, /bd dolt start/, "the failure an agent will actually hit gets its own remedy");
+});
+
+test("the block forbids the improvisations a stranded agent reaches for", () => {
+  const block = renderBeadhiveGroupBlock({ provider: "github", org: "briancripe" }, "/home/bees/workspace");
+  assert.match(block, /Do not hand-roll a `dolt sql-server`/, "a second server on the same port breaks bh's own");
+  assert.match(block, /GitHub API/, "reading the fleet over the API looks like progress and is not");
+});

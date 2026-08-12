@@ -4,6 +4,7 @@ import { errMessage } from "../../../chassis/src/errors";
 import { icon } from "../ui";
 import { appState, can } from "../shell-state";
 import { layerState } from "./layer-state";
+import { activeScopeId } from "./tray";
 import {
   asOfLabel,
   beadhiveState,
@@ -185,7 +186,7 @@ export async function renderBeadhivePanel(force = false): Promise<void> {
       layer = await fetchLayerStatus();
       layerLoaded = true;
     }
-    if (beadhiveState.enabled) await fetchTray();
+    if (beadhiveState.enabled) await fetchTray(activeScopeId());
   } catch (e) {
     beadhiveState.notice = errMessage(e);
   }

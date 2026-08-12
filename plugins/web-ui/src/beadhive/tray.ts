@@ -39,11 +39,15 @@ export function toggleHiveTray(): void {
   if (beadhiveState.trayOpen && !beadhiveState.snapshot) void loadTray();
 }
 
+export function activeScopeId(): string | undefined {
+  return mainConversation().state.scopeId ?? undefined;
+}
+
 async function loadTray(): Promise<void> {
   beadhiveState.trayLoading = true;
   drawHiveTray();
   try {
-    await fetchTray();
+    await fetchTray(activeScopeId());
     beadhiveState.notice = "";
   } catch (e) {
     beadhiveState.notice = errMessage(e);
@@ -60,7 +64,7 @@ async function manualRefresh(): Promise<void> {
   beadhiveState.trayLoading = true;
   drawHiveTray();
   try {
-    beadhiveState.notice = refreshNotice(await refreshTray());
+    beadhiveState.notice = refreshNotice(await refreshTray(activeScopeId()));
   } catch (e) {
     beadhiveState.notice = errMessage(e);
   } finally {
@@ -260,6 +264,13 @@ export function drawHiveTray(): void {
   if (!beadhiveState.enabled) {
     host.replaceChildren();
     return;
+  }
+  if (beadhiveState.trayOpen && !beadhiveState.trayLoading) {
+    const scope = activeScopeId() ?? "";
+    if (beadhiveState.snapshot && beadhiveState.snapshotScope !== scope) {
+      beadhiveState.selectedId = "";
+      void loadTray();
+    }
   }
   if (!beadhiveState.trayOpen) {
     const rail = document.createElement("div");

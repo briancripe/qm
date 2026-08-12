@@ -50,6 +50,7 @@ export const beadhiveState = {
   projects: false,
   loadedFlags: false,
   snapshot: null as WorkSnapshot | null,
+  snapshotScope: "" as string,
   trayOpen: false,
   trayLoading: false,
   expanded: new Set<string>(),
@@ -62,6 +63,7 @@ export const beadhiveState = {
 
 export function resetBeadhiveState(): void {
   beadhiveState.snapshot = null;
+  beadhiveState.snapshotScope = "";
   beadhiveState.expanded = new Set<string>();
   beadhiveState.collapsedGroups = new Set<string>();
   beadhiveState.showAllGroups = false;
@@ -89,6 +91,7 @@ export async function fetchTray(scopeId?: string): Promise<WorkSnapshot | null> 
   const qs = scopeId ? `?scopeId=${encodeURIComponent(scopeId)}` : "";
   const body = await api<{ snapshot: WorkSnapshot | null }>(`/api/projects/work${qs}`);
   beadhiveState.snapshot = body.snapshot;
+  beadhiveState.snapshotScope = scopeId ?? "";
   return body.snapshot;
 }
 
