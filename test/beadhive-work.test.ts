@@ -1,7 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createMemoryMap } from "../src/persistence/durable-map.ts";
-import { collectBeadhiveWork, readyCommand, shapeReadyBeads, READY_TRUNCATED_EXIT } from "../src/beadhive/work.ts";
+import {
+  collectBeadhiveWork,
+  collectScopeWork,
+  failureMessage,
+  readyCommand,
+  shapeReadyBeads,
+  PREPARE_COMMAND,
+  READY_TRUNCATED_EXIT,
+} from "../src/beadhive/work.ts";
 import type { ProjectWorkSnapshot } from "../src/projects/project-provider.ts";
 import { createWorkStore, type PersistedProjectWorkSnapshot } from "../src/projects/work-store.ts";
 import type { BeadhiveHive } from "../src/projects/beadhive-hives.ts";
@@ -184,4 +192,37 @@ test("a failed collect keeps the last good snapshot instead of erasing it", asyn
   assert.equal(result.status, "failed");
   assert.equal(result.snapshot?.asOf, 10_000, "the operator keeps seeing the last fleet read that worked");
   assert.equal((await store.get("s"))?.asOf, 10_000);
+});
+
+test("a warning on stderr is never reported as the failure", () => {
+  const stderr = [
+    "Warning: /home/bees/workspace/gh/org/repo/.beads has permissions 0750 (recommended: 0700).",
+    "Error: failed to open database: Dolt server unreachable at 127.0.0.1:3308",
+  ].join("\n");
+  assert.match(failureMessage(stderr, 1), /Dolt server unreachable/, "the real error wins over a leading warning");
+});
+
+test("a failure with only warnings still says something, and an empty one names the exit", () => {
+  assert.match(failureMessage("Warning: nothing important\n", 1), /nothing important/);
+  assert.equal(failureMessage("   \n\n", 3), "exit 3");
+});
+
+test("the prepare step runs before any hive is read", async () => {
+  const seen: string[] = [];
+  const exec = async (cmd: string) => {
+    seen.push(cmd);
+    return { stdout: "__QM_NO_HQ__", stderr: "", code: 0 } as never;
+  };
+  await collectScopeWork({
+    sandbox: {
+      provision: async () => ({ id: "sbx" }) as never,
+      run: async (_h: unknown, cmd: string) => exec(cmd),
+      teardown: async () => undefined,
+    } as never,
+    scope: "personal:brian",
+    bhHome: "/home/bees/.beadhive",
+    workspacePath: "/home/bees/workspace",
+    now: () => 0,
+  }).catch(() => undefined);
+  assert.equal(seen[0], PREPARE_COMMAND, "Dolt and the setup check are ensured before the fleet is read");
 });

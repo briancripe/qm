@@ -66,6 +66,21 @@ export function readyCommand(workspacePath: string, hive: BeadhiveHive): string 
   return `cd ${shq(hiveRepoPath(workspacePath, hive))} && bh work ready --json`;
 }
 
+export const PREPARE_COMMAND = "bd dolt start >/dev/null 2>&1 || true; bh setup check >/dev/null 2>&1 || true";
+
+const WARNING_LINE = /^\s*(warning|note|hint)\b[:\s]/i;
+
+export function failureMessage(stderr: string, code: number): string {
+  const lines = stderr
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const signalled = lines.find((line) => /^(error|✗|✖)\b|^error:/i.test(line));
+  if (signalled) return signalled;
+  const substantive = lines.filter((line) => !WARNING_LINE.test(line));
+  return substantive[0] ?? lines[0] ?? `exit ${code}`;
+}
+
 export interface CollectWorkOptions {
   exec: HiveExec;
   hives: readonly BeadhiveHive[];
@@ -87,7 +102,7 @@ export async function collectBeadhiveWork(opts: CollectWorkOptions): Promise<Pro
           state: "failed",
           items: [],
           total: 0,
-          error: r.stderr.trim().split("\n")[0] || `exit ${r.code}`,
+          error: failureMessage(r.stderr, r.code),
         });
         continue;
       }
@@ -121,6 +136,7 @@ export interface ScopeWorkOptions {
 
 export async function collectScopeWork(opts: ScopeWorkOptions): Promise<ProjectWorkSnapshot> {
   return withScopeExec(opts.sandbox, opts.scope, async (exec) => {
+    await exec(PREPARE_COMMAND);
     const hives = await enumerateBeadhiveHives(exec, opts.bhHome);
     return collectBeadhiveWork({ exec, hives, workspacePath: opts.workspacePath, now: opts.now() });
   });
