@@ -22,7 +22,7 @@ import { emojiRoutes } from "./emoji.ts";
 import { projectRoutes } from "./projects.ts";
 import { contextPolicyRoutes } from "./context-policy.ts";
 import { deploymentLayerRoutes } from "./deployment-layer.ts";
-import { beadhiveRoutes } from "./beadhive.ts";
+import { projectProviderRoutes } from "./project-providers.ts";
 import { egressAuditRoutes } from "./egress-audit.ts";
 import { authBrokerRoutes } from "./auth-broker.ts";
 
@@ -42,7 +42,7 @@ export const rawRoutes: ReadonlyArray<Route<BaseCtx>> = [
 
 export const apiRoutes: ReadonlyArray<Route<ApiCtx>> = [
   ...deploymentLayerRoutes,
-  ...beadhiveRoutes,
+  ...projectProviderRoutes,
   ...turnRoutes,
   ...credentialRoutes,
   ...keychainRoutes,

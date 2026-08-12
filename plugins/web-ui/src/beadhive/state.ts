@@ -1,31 +1,31 @@
 import { api } from "../core-bridge";
 
-export interface TrayBead {
+export interface WorkItem {
   id: string;
   title: string;
   status: string;
   priority: number;
-  issueType: string;
+  kind: string;
   owner?: string;
   updatedAt?: string;
   blockedBy: number;
   blocks: number;
 }
 
-export interface TrayHive {
-  provider: string;
-  org: string;
-  repo: string;
+export interface WorkSource {
+  key: string;
+  name: string;
   state: "ok" | "truncated" | "failed";
-  ready: TrayBead[];
-  readyTotal: number;
+  items: WorkItem[];
+  total: number;
   error?: string;
 }
 
-export interface TraySnapshot {
+export interface WorkSnapshot {
+  providerId: string;
   asOf: number;
-  hives: TrayHive[];
-  readyTotal: number;
+  sources: WorkSource[];
+  total: number;
   reachedEvery: boolean;
 }
 
@@ -44,7 +44,7 @@ export const beadhiveState = {
   enabled: false,
   projects: false,
   loadedFlags: false,
-  snapshot: null as TraySnapshot | null,
+  snapshot: null as WorkSnapshot | null,
   trayOpen: false,
   trayLoading: false,
   notice: "",
@@ -72,33 +72,36 @@ export async function setBeadhiveFlag(resource: "beadhive-enabled" | "beadhive-p
   else beadhiveState.projects = on;
 }
 
-export async function fetchTray(scopeId?: string): Promise<TraySnapshot | null> {
+export async function fetchTray(scopeId?: string): Promise<WorkSnapshot | null> {
   const qs = scopeId ? `?scopeId=${encodeURIComponent(scopeId)}` : "";
-  const body = await api<{ snapshot: TraySnapshot | null }>(`/beadhive/tray${qs}`);
+  const body = await api<{ snapshot: WorkSnapshot | null }>(`/projects/work${qs}`);
   beadhiveState.snapshot = body.snapshot;
   return body.snapshot;
 }
 
 export async function refreshTray(
   scopeId?: string,
-): Promise<{ status: RefreshStatus; snapshot: TraySnapshot | null; retryAfterMs?: number; message?: string }> {
+): Promise<{ status: RefreshStatus; snapshot: WorkSnapshot | null; retryAfterMs?: number; message?: string }> {
   const qs = scopeId ? `?scopeId=${encodeURIComponent(scopeId)}` : "";
   const body = await api<{
     status: RefreshStatus;
-    snapshot: TraySnapshot | null;
+    snapshot: WorkSnapshot | null;
     retryAfterMs?: number;
     message?: string;
-  }>(`/beadhive/tray/refresh${qs}`, { method: "POST" });
+  }>(`/projects/work/refresh${qs}`, { method: "POST" });
   if (body.snapshot) beadhiveState.snapshot = body.snapshot;
   return body;
 }
 
-export async function syncBeadhiveProjects(): Promise<{
+export interface SyncResult {
+  providerId: string;
   created: unknown[];
   unchanged: unknown[];
   orphaned: unknown[];
-}> {
-  return api("/beadhive/sync", { method: "POST" });
+}
+
+export async function syncProjectProviders(): Promise<{ results: SyncResult[] }> {
+  return api("/projects/sync", { method: "POST" });
 }
 
 export async function fetchLayerStatus(): Promise<LayerStatus | null> {
@@ -118,7 +121,7 @@ export function refreshNotice(result: { status: RefreshStatus; retryAfterMs?: nu
   return result.message ? `Could not read the fleet: ${result.message}` : "Could not read the fleet.";
 }
 
-export function asOfLabel(snapshot: TraySnapshot | null, now = Date.now()): string {
+export function asOfLabel(snapshot: WorkSnapshot | null, now = Date.now()): string {
   if (!snapshot) return "never read";
   const seconds = Math.max(0, Math.round((now - snapshot.asOf) / 1000));
   if (seconds < 60) return "just now";

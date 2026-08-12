@@ -4,40 +4,11 @@ import { errMessage } from "../util/errors.ts";
 import { withScopeExec } from "./scope-exec.ts";
 import type { Sandbox } from "../sandbox/sandbox.ts";
 import type { ScopeId } from "../types.ts";
+import type { ProjectWorkItem, ProjectWorkSnapshot, ProjectWorkSource } from "../projects/project-provider.ts";
 
 export const READY_TRUNCATED_EXIT = 3;
-export const TRAY_BEADS_PER_HIVE = 25;
-
-export interface TrayBead {
-  id: string;
-  title: string;
-  status: string;
-  priority: number;
-  issueType: string;
-  owner?: string;
-  updatedAt?: string;
-  blockedBy: number;
-  blocks: number;
-}
-
-export type TrayHiveState = "ok" | "truncated" | "failed";
-
-export interface TrayHive {
-  provider: string;
-  org: string;
-  repo: string;
-  state: TrayHiveState;
-  ready: TrayBead[];
-  readyTotal: number;
-  error?: string;
-}
-
-export interface TraySnapshot {
-  asOf: number;
-  hives: TrayHive[];
-  readyTotal: number;
-  reachedEvery: boolean;
-}
+export const WORK_ITEMS_PER_HIVE = 25;
+export const BEADHIVE_PROVIDER_ID = "beadhive";
 
 interface RawBead {
   id?: unknown;
@@ -54,15 +25,18 @@ interface RawBead {
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 
-export function shapeReadyBeads(stdout: string, limit = TRAY_BEADS_PER_HIVE): { beads: TrayBead[]; total: number } {
+export function shapeReadyBeads(
+  stdout: string,
+  limit = WORK_ITEMS_PER_HIVE,
+): { items: ProjectWorkItem[]; total: number } {
   let parsed: unknown;
   try {
     parsed = JSON.parse(stdout.trim() || "[]");
   } catch {
-    return { beads: [], total: 0 };
+    return { items: [], total: 0 };
   }
-  if (!Array.isArray(parsed)) return { beads: [], total: 0 };
-  const beads = parsed
+  if (!Array.isArray(parsed)) return { items: [], total: 0 };
+  const items = parsed
     .filter((b): b is RawBead => typeof b === "object" && b !== null)
     .filter((b) => str(b.id))
     .slice(0, limit)
@@ -71,68 +45,73 @@ export function shapeReadyBeads(stdout: string, limit = TRAY_BEADS_PER_HIVE): { 
       title: str(b.title),
       status: str(b.status),
       priority: num(b.priority),
-      issueType: str(b.issue_type),
+      kind: str(b.issue_type),
       ...(str(b.owner) ? { owner: str(b.owner) } : {}),
       ...(str(b.updated_at) ? { updatedAt: str(b.updated_at) } : {}),
       blockedBy: num(b.dependency_count),
       blocks: num(b.dependent_count),
     }));
-  return { beads, total: parsed.length };
+  return { items, total: parsed.length };
+}
+
+export function hiveKey(hive: BeadhiveHive): string {
+  return `${hive.provider}/${hive.org}/${hive.repo}`;
 }
 
 export function hiveRepoPath(workspacePath: string, hive: BeadhiveHive): string {
-  return `${workspacePath.replace(/\/+$/, "")}/${hive.provider}/${hive.org}/${hive.repo}`;
+  return `${workspacePath.replace(/\/+$/, "")}/${hiveKey(hive)}`;
 }
 
 export function readyCommand(workspacePath: string, hive: BeadhiveHive): string {
   return `cd ${shq(hiveRepoPath(workspacePath, hive))} && bh work ready --json`;
 }
 
-export interface CollectTrayOptions {
+export interface CollectWorkOptions {
   exec: HiveExec;
   hives: readonly BeadhiveHive[];
   workspacePath: string;
   now: number;
-  beadsPerHive?: number;
+  itemsPerHive?: number;
 }
 
-export async function collectTraySnapshot(opts: CollectTrayOptions): Promise<TraySnapshot> {
-  const limit = opts.beadsPerHive ?? TRAY_BEADS_PER_HIVE;
-  const hives: TrayHive[] = [];
+export async function collectBeadhiveWork(opts: CollectWorkOptions): Promise<ProjectWorkSnapshot> {
+  const limit = opts.itemsPerHive ?? WORK_ITEMS_PER_HIVE;
+  const sources: ProjectWorkSource[] = [];
   for (const hive of opts.hives) {
-    const base = { provider: hive.provider, org: hive.org, repo: hive.repo };
+    const base = { key: hiveKey(hive), name: hive.repo };
     try {
       const r = await opts.exec(readyCommand(opts.workspacePath, hive));
       if (r.code !== 0 && r.code !== READY_TRUNCATED_EXIT) {
-        hives.push({
+        sources.push({
           ...base,
           state: "failed",
-          ready: [],
-          readyTotal: 0,
+          items: [],
+          total: 0,
           error: r.stderr.trim().split("\n")[0] || `exit ${r.code}`,
         });
         continue;
       }
-      const { beads, total } = shapeReadyBeads(r.stdout, limit);
-      hives.push({
+      const { items, total } = shapeReadyBeads(r.stdout, limit);
+      sources.push({
         ...base,
-        state: r.code === READY_TRUNCATED_EXIT || total > beads.length ? "truncated" : "ok",
-        ready: beads,
-        readyTotal: total,
+        state: r.code === READY_TRUNCATED_EXIT || total > items.length ? "truncated" : "ok",
+        items,
+        total,
       });
     } catch (e) {
-      hives.push({ ...base, state: "failed", ready: [], readyTotal: 0, error: errMessage(e) });
+      sources.push({ ...base, state: "failed", items: [], total: 0, error: errMessage(e) });
     }
   }
   return {
+    providerId: BEADHIVE_PROVIDER_ID,
     asOf: opts.now,
-    hives,
-    readyTotal: hives.reduce((sum, h) => sum + h.readyTotal, 0),
-    reachedEvery: hives.every((h) => h.state !== "failed"),
+    sources,
+    total: sources.reduce((sum, s) => sum + s.total, 0),
+    reachedEvery: sources.every((s) => s.state !== "failed"),
   };
 }
 
-export interface ScopeTrayOptions {
+export interface ScopeWorkOptions {
   sandbox: Sandbox;
   scope: ScopeId;
   bhHome: string;
@@ -140,9 +119,9 @@ export interface ScopeTrayOptions {
   now: () => number;
 }
 
-export async function collectScopeTray(opts: ScopeTrayOptions): Promise<TraySnapshot> {
+export async function collectScopeWork(opts: ScopeWorkOptions): Promise<ProjectWorkSnapshot> {
   return withScopeExec(opts.sandbox, opts.scope, async (exec) => {
     const hives = await enumerateBeadhiveHives(exec, opts.bhHome);
-    return collectTraySnapshot({ exec, hives, workspacePath: opts.workspacePath, now: opts.now() });
+    return collectBeadhiveWork({ exec, hives, workspacePath: opts.workspacePath, now: opts.now() });
   });
 }

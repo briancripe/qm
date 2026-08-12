@@ -10,7 +10,7 @@ import {
   fetchTray,
   loadBeadhiveFlags,
   setBeadhiveFlag,
-  syncBeadhiveProjects,
+  syncProjectProviders,
   type LayerStatus,
 } from "./state";
 
@@ -68,8 +68,11 @@ async function runSync(): Promise<void> {
   beadhiveState.notice = "Reading the fleet…";
   drawBeadhivePanel();
   try {
-    const result = await syncBeadhiveProjects();
-    beadhiveState.notice = `${result.created.length} created, ${result.unchanged.length} unchanged, ${result.orphaned.length} orphaned.`;
+    const { results } = await syncProjectProviders();
+    const created = results.reduce((n, r) => n + r.created.length, 0);
+    const unchanged = results.reduce((n, r) => n + r.unchanged.length, 0);
+    const orphaned = results.reduce((n, r) => n + r.orphaned.length, 0);
+    beadhiveState.notice = `${created} created, ${unchanged} unchanged, ${orphaned} orphaned.`;
   } catch (e) {
     beadhiveState.notice = errMessage(e);
   } finally {
@@ -145,11 +148,11 @@ export function drawBeadhivePanel(): void {
 
       <div class="bh-section">
         <h2 class="bh-section-title">Fleet</h2>
-        ${statusRow("Hives", snapshot ? snapshot.hives.length : "—")}
-        ${statusRow("Ready beads", snapshot ? snapshot.readyTotal : "—")} ${statusRow("Last read", asOfLabel(snapshot))}
+        ${statusRow("Work sources", snapshot ? snapshot.sources.length : "—")}
+        ${statusRow("Ready items", snapshot ? snapshot.total : "—")} ${statusRow("Last read", asOfLabel(snapshot))}
         ${
           snapshot && !snapshot.reachedEvery
-            ? html`<div class="bh-note">Some hives could not be read — the tray shows which.</div>`
+            ? html`<div class="bh-note">Some sources could not be read — the tray shows which.</div>`
             : nothing
         }
         <div class="bh-actions">

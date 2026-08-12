@@ -1,14 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createMemoryMap } from "../src/persistence/durable-map.ts";
-import {
-  collectTraySnapshot,
-  readyCommand,
-  shapeReadyBeads,
-  READY_TRUNCATED_EXIT,
-  type TraySnapshot,
-} from "../src/beadhive/tray.ts";
-import { createTrayStore, type PersistedTraySnapshot } from "../src/beadhive/tray-store.ts";
+import { collectBeadhiveWork, readyCommand, shapeReadyBeads, READY_TRUNCATED_EXIT } from "../src/beadhive/work.ts";
+import type { ProjectWorkSnapshot } from "../src/projects/project-provider.ts";
+import { createWorkStore, type PersistedProjectWorkSnapshot } from "../src/projects/work-store.ts";
 import type { BeadhiveHive } from "../src/projects/beadhive-hives.ts";
 
 const HIVE: BeadhiveHive = { provider: "github", org: "beadhive", repo: "core" };
@@ -30,14 +25,14 @@ const bead = (id: string, over: Record<string, unknown> = {}) => ({
 });
 
 test("shaping keeps what the tray renders and drops the kilobyte fields", () => {
-  const { beads, total } = shapeReadyBeads(JSON.stringify([bead("bh-1")]));
+  const { items, total } = shapeReadyBeads(JSON.stringify([bead("bh-1")]));
   assert.equal(total, 1);
-  const only = beads[0]!;
+  const only = items[0]!;
   assert.deepEqual(Object.keys(only).sort(), [
     "blockedBy",
     "blocks",
     "id",
-    "issueType",
+    "kind",
     "owner",
     "priority",
     "status",
@@ -51,15 +46,15 @@ test("shaping keeps what the tray renders and drops the kilobyte fields", () => 
 
 test("shaping caps the rows but reports the true total", () => {
   const raw = JSON.stringify(Array.from({ length: 86 }, (_, i) => bead(`bh-${i}`)));
-  const { beads, total } = shapeReadyBeads(raw, 25);
-  assert.equal(beads.length, 25);
+  const { items, total } = shapeReadyBeads(raw, 25);
+  assert.equal(items.length, 25);
   assert.equal(total, 86, "the count the operator sees is the real one, not the capped one");
 });
 
 test("malformed or non-array output yields nothing rather than throwing", () => {
-  assert.deepEqual(shapeReadyBeads("not json"), { beads: [], total: 0 });
-  assert.deepEqual(shapeReadyBeads('{"error":"no beads project"}'), { beads: [], total: 0 });
-  assert.deepEqual(shapeReadyBeads(""), { beads: [], total: 0 });
+  assert.deepEqual(shapeReadyBeads("not json"), { items: [], total: 0 });
+  assert.deepEqual(shapeReadyBeads('{"error":"no beads project"}'), { items: [], total: 0 });
+  assert.deepEqual(shapeReadyBeads(""), { items: [], total: 0 });
 });
 
 test("the ready command runs inside the hive's own checkout", () => {
@@ -70,21 +65,21 @@ test("the ready command runs inside the hive's own checkout", () => {
 });
 
 test("exit 3 is a truncated read, not a failure", async () => {
-  const snapshot = await collectTraySnapshot({
+  const snapshot = await collectBeadhiveWork({
     exec: async () => ({ stdout: JSON.stringify([bead("bh-1")]), stderr: "", code: READY_TRUNCATED_EXIT }),
     hives: [HIVE],
     workspacePath: "/w",
     now: 1000,
   });
-  assert.equal(snapshot.hives[0]!.state, "truncated");
-  assert.equal(snapshot.hives[0]!.ready.length, 1, "the beads it did return are still shown");
+  assert.equal(snapshot.sources[0]!.state, "truncated");
+  assert.equal(snapshot.sources[0]!.items.length, 1, "the beads it did return are still shown");
   assert.equal(snapshot.reachedEvery, true, "a truncated hive was still reached");
 });
 
 test("one unreachable hive does not blank the others", async () => {
   const good: BeadhiveHive = { provider: "github", org: "beadhive", repo: "docs" };
-  const snapshot = await collectTraySnapshot({
-    exec: async (cmd) =>
+  const snapshot = await collectBeadhiveWork({
+    exec: async (cmd: string) =>
       cmd.includes("/core")
         ? { stdout: "", stderr: "Dolt server unreachable at 127.0.0.1:3308\n", code: 1 }
         : { stdout: JSON.stringify([bead("bh-2")]), stderr: "", code: 0 },
@@ -92,20 +87,26 @@ test("one unreachable hive does not blank the others", async () => {
     workspacePath: "/w",
     now: 1000,
   });
-  assert.equal(snapshot.hives[0]!.state, "failed");
-  assert.match(snapshot.hives[0]!.error!, /Dolt server unreachable/);
-  assert.equal(snapshot.hives[1]!.state, "ok");
-  assert.equal(snapshot.readyTotal, 1);
+  assert.equal(snapshot.sources[0]!.state, "failed");
+  assert.match(snapshot.sources[0]!.error!, /Dolt server unreachable/);
+  assert.equal(snapshot.sources[1]!.state, "ok");
+  assert.equal(snapshot.total, 1);
   assert.equal(snapshot.reachedEvery, false, "the tray must be able to say it saw only part of the fleet");
 });
 
-const snap = (asOf: number): TraySnapshot => ({ asOf, hives: [], readyTotal: 0, reachedEvery: true });
+const snap = (asOf: number): ProjectWorkSnapshot => ({
+  providerId: "beadhive",
+  asOf,
+  sources: [],
+  total: 0,
+  reachedEvery: true,
+});
 
 function storeHarness(opts: { minRefreshMs?: number } = {}) {
-  const backing = createMemoryMap<PersistedTraySnapshot>();
+  const backing = createMemoryMap<PersistedProjectWorkSnapshot>();
   let clock = 10_000;
   let collects = 0;
-  const store = createTrayStore({
+  const store = createWorkStore({
     backing,
     now: () => clock,
     ...(opts.minRefreshMs !== undefined ? { minRefreshMs: opts.minRefreshMs } : {}),
@@ -118,11 +119,11 @@ function storeHarness(opts: { minRefreshMs?: number } = {}) {
 }
 
 test("a refresh while one is in flight collapses instead of starting a second", async () => {
-  const backing = createMemoryMap<PersistedTraySnapshot>();
+  const backing = createMemoryMap<PersistedProjectWorkSnapshot>();
   let collects = 0;
   let unblock: () => void = () => undefined;
   const gate = new Promise<void>((r) => (unblock = r));
-  const store = createTrayStore({
+  const store = createWorkStore({
     backing,
     now: () => 10_000,
     collect: async () => {
@@ -164,10 +165,10 @@ test("force overrides the interval, and a lapsed interval refreshes normally", a
 });
 
 test("a failed collect keeps the last good snapshot instead of erasing it", async () => {
-  const backing = createMemoryMap<PersistedTraySnapshot>();
+  const backing = createMemoryMap<PersistedProjectWorkSnapshot>();
   let fail = false;
   let clock = 10_000;
-  const store = createTrayStore({
+  const store = createWorkStore({
     backing,
     now: () => clock,
     minRefreshMs: 0,

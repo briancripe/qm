@@ -24,8 +24,9 @@ import {
   type PersistedDeploymentIdentity,
 } from "./resolution/config-store.ts";
 import { createResolutionService } from "./resolution/resolution-service.ts";
-import { createTrayStore, type PersistedTraySnapshot, type TrayStore } from "./beadhive/tray-store.ts";
-import { collectScopeTray } from "./beadhive/tray.ts";
+import { createWorkStore, type PersistedProjectWorkSnapshot, type WorkStore } from "./projects/work-store.ts";
+import { createProjectProviderRegistry, type ProjectProviderRegistry } from "./projects/project-provider.ts";
+import { createBeadhiveProvider } from "./beadhive/provider.ts";
 import { createAclStore, type AclStore } from "./acl/acl-store.ts";
 import { createPostgresGrantStore } from "./acl/postgres-grant-store.ts";
 import { createSkillStore, type SkillStore, type Skill } from "./skills/skill-store.ts";
@@ -352,7 +353,8 @@ export interface BuiltApp {
   workspace: WorkspaceStore;
   memory: MemoryService;
   sandbox: Sandbox;
-  beadhiveTray?: TrayStore;
+  projectProviders: ProjectProviderRegistry;
+  projectWork?: WorkStore;
   advisoryLock: AdvisoryLock;
   sandboxMigration: SandboxMigrationRunner;
   blobTransfer: BlobTransferStore;
@@ -647,20 +649,22 @@ export function buildApp(
   });
   const beadhiveHome = config.localSandbox.env?.BH_HOME;
   const beadhiveWorkspace = config.localSandbox.env?.GIT_WORKSPACE;
-  const beadhiveTray =
+  const beadhiveProvider =
     beadhiveHome && beadhiveWorkspace
-      ? createTrayStore({
-          backing: artifactMap<PersistedTraySnapshot>("beadhive_tray_snapshots"),
-          collect: (scope) =>
-            collectScopeTray({
-              sandbox,
-              scope: scope as ScopeId,
-              bhHome: beadhiveHome,
-              workspacePath: beadhiveWorkspace,
-              now: () => Date.now(),
-            }),
+      ? createBeadhiveProvider({
+          sandbox,
+          bhHome: beadhiveHome,
+          workspacePath: beadhiveWorkspace,
+          enabled: () => configStore.getBeadhiveProjectsDurable(),
         })
       : undefined;
+  const projectProviders = createProjectProviderRegistry(beadhiveProvider ? [beadhiveProvider] : []);
+  const projectWork = beadhiveProvider
+    ? createWorkStore({
+        backing: artifactMap<PersistedProjectWorkSnapshot>("project_work_snapshots"),
+        collect: (scope) => beadhiveProvider.workItems(scope as ScopeId),
+      })
+    : undefined;
   const sandboxMigration = createSandboxMigrationRunner({
     backends: sandboxBackends,
     routes: sandboxRoutes,
@@ -1511,7 +1515,8 @@ export function buildApp(
     ...(askResolution ? { fireAskResolution: askResolution } : {}),
     ...(dropResolution ? { fireDropResolution: dropResolution } : {}),
     sandbox,
-    ...(beadhiveTray ? { beadhiveTray } : {}),
+    projectProviders,
+    ...(projectWork ? { projectWork } : {}),
     sandboxMigration,
     advisoryLock,
     blobTransfer,

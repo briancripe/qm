@@ -8,9 +8,9 @@ import {
   fetchTray,
   refreshNotice,
   refreshTray,
-  type TrayBead,
-  type TrayHive,
-  type TraySnapshot,
+  type WorkItem,
+  type WorkSnapshot,
+  type WorkSource,
 } from "./state";
 
 const TRAY_ID = "bh-tray";
@@ -66,7 +66,7 @@ async function manualRefresh(): Promise<void> {
   }
 }
 
-function beadRow(bead: TrayBead) {
+function beadRow(bead: WorkItem) {
   return html`<li class="bh-bead">
     <div class="bh-bead-top">
       <span class="bh-bead-id">${bead.id}</span>
@@ -77,8 +77,8 @@ function beadRow(bead: TrayBead) {
   </li>`;
 }
 
-function hiveBlock(hive: TrayHive) {
-  const name = `${hive.provider}/${hive.org}/${hive.repo}`;
+function hiveBlock(hive: WorkSource) {
+  const name = hive.key;
   if (hive.state === "failed") {
     return html`<section class="bh-hive">
       <header class="bh-hive-head">
@@ -92,33 +92,31 @@ function hiveBlock(hive: TrayHive) {
     <header class="bh-hive-head">
       <span class="bh-hive-name">${name}</span>
       <span class="bh-hive-count">
-        ${hive.readyTotal}
+        ${hive.total}
         ready${
-          hive.state === "truncated" && hive.ready.length < hive.readyTotal
-            ? html` · showing ${hive.ready.length}`
-            : nothing
+          hive.state === "truncated" && hive.items.length < hive.total ? html` · showing ${hive.items.length}` : nothing
         }
       </span>
     </header>
     ${
-      hive.ready.length
+      hive.items.length
         ? html`<ul class="bh-beads">
-            ${hive.ready.map(beadRow)}
+            ${hive.items.map(beadRow)}
           </ul>`
         : html`<div class="bh-hive-empty">Nothing ready.</div>`
     }
   </section>`;
 }
 
-function trayBody(snapshot: TraySnapshot | null) {
+function trayBody(snapshot: WorkSnapshot | null) {
   if (!snapshot) {
     const text = beadhiveState.trayLoading ? "" : "No snapshot yet — refresh to read the fleet.";
     return html`<div class="bh-tray-empty">${text}</div>`;
   }
-  if (!snapshot.hives.length) {
-    return html`<div class="bh-tray-empty">No hives are registered in this scope.</div>`;
+  if (!snapshot.sources.length) {
+    return html`<div class="bh-tray-empty">No work sources are registered in this scope.</div>`;
   }
-  return html`<div class="bh-tray-body">${snapshot.hives.map(hiveBlock)}</div>`;
+  return html`<div class="bh-tray-body">${snapshot.sources.map(hiveBlock)}</div>`;
 }
 
 export function drawHiveTray(): void {
@@ -141,7 +139,7 @@ export function drawHiveTray(): void {
       >
         ${icon(PanelRightOpen, 16)}
         <span class="bh-tray-launcher-label">Hive</span>
-        ${beadhiveState.snapshot ? html`<span class="bh-tray-launcher-count">${beadhiveState.snapshot.readyTotal}</span>` : nothing}
+        ${beadhiveState.snapshot ? html`<span class="bh-tray-launcher-count">${beadhiveState.snapshot.total}</span>` : nothing}
       </button>`,
       rail,
     );

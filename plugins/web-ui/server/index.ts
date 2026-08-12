@@ -921,15 +921,15 @@ const routeRequest = async (req: IncomingMessage, res: ServerResponse) => {
       return relay(res, r);
     }
 
-    if (method === "GET" && path === "/api/beadhive/tray") {
+    if (method === "GET" && path === "/api/projects/work") {
       const scopeId = url.searchParams.get("scopeId") || `personal:${user}`;
-      const r = await coreFetch("GET", `/v1/beadhive/tray?scopeId=${encodeURIComponent(scopeId)}`);
+      const r = await coreFetch("GET", `/v1/projects/work?scopeId=${encodeURIComponent(scopeId)}`);
       return relay(res, r);
     }
 
-    if (method === "POST" && path === "/api/beadhive/tray/refresh") {
+    if (method === "POST" && path === "/api/projects/work/refresh") {
       const scopeId = url.searchParams.get("scopeId") || `personal:${user}`;
-      const r = await coreFetch("POST", "/v1/beadhive/tray/refresh", JSON.stringify({ scopeId }));
+      const r = await coreFetch("POST", "/v1/projects/work/refresh", JSON.stringify({ scopeId }));
       return relay(res, r);
     }
 
@@ -951,8 +951,8 @@ const routeRequest = async (req: IncomingMessage, res: ServerResponse) => {
       return relay(res, r);
     }
 
-    if (method === "POST" && path === "/api/beadhive/sync") {
-      const r = await coreFetch("POST", "/v1/beadhive/sync", JSON.stringify({ principalId: user }));
+    if (method === "POST" && path === "/api/projects/sync") {
+      const r = await coreFetch("POST", "/v1/projects/sync", JSON.stringify({ principalId: user }));
       return relay(res, r);
     }
 
