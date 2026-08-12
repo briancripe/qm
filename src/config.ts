@@ -39,6 +39,8 @@ export interface Config {
   databaseUrl?: string;
   harness: "mock" | "pi" | "opencode" | "codex" | "claude";
   securityPosture: SecurityPosture;
+  beadhiveEnabled: boolean;
+  beadhiveProjects: boolean;
   sandboxBackend: "aws" | "local" | "sprites";
   sandboxSecondaryBackend?: "aws" | "local" | "sprites";
   deployProvider: "docker" | "aws";
@@ -776,6 +778,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ...(env.DATABASE_URL ? { databaseUrl: env.DATABASE_URL } : {}),
     harness: harnessEnvStrict(env.HARNESS),
     securityPosture: securityPostureEnvStrict(env.HARNESS_SECURITY_POSTURE),
+    beadhiveEnabled: boolEnvStrict("BH_ENABLED", env.BH_ENABLED) ?? false,
+    beadhiveProjects: boolEnvStrict("BH_PROJECTS", env.BH_PROJECTS) ?? false,
     securityScreenBackend,
     ...(securityScreenBackend === "proxy"
       ? {

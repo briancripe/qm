@@ -443,6 +443,8 @@ export function buildApp(
     approvedHarnesses: artifactMap<PersistedApprovedHarnesses>("approved_harness_configs"),
     orgAmbient: artifactMap<PersistedScopedFlag>("org_ambient_flag"),
     interactiveFastMode: artifactMap<PersistedScopedFlag>("interactive_fast_mode_flag"),
+    beadhiveEnabled: artifactMap<PersistedScopedFlag>("beadhive_enabled_flag"),
+    beadhiveProjects: artifactMap<PersistedScopedFlag>("beadhive_projects_flag"),
     webuiModels: artifactMap<PersistedWebuiModels>("webui_model_configs"),
     peopleDirectoryUrls: artifactMap<PersistedPeopleDirectoryUrl>("people_directory_urls"),
     branding: artifactMap<PersistedBranding>("branding_configs"),
@@ -451,6 +453,8 @@ export function buildApp(
     turnWallClocks: artifactMap<PersistedTurnWallClock>("turn_wall_clock_configs"),
     deploymentIdentity: artifactMap<PersistedDeploymentIdentity>("deployment_identity"),
     defaultSecurityPosture: config.securityPosture,
+    defaultBeadhiveEnabled: config.beadhiveEnabled,
+    defaultBeadhiveProjects: config.beadhiveProjects,
     ...(config.connectorSecretKey ? { connectorSecretKey: config.connectorSecretKey } : {}),
   });
   void configStore.hydrate?.();
@@ -550,6 +554,7 @@ export function buildApp(
     // A group scope only stands for a Beadhive group when its project records
     // one; everything else resolves to null and the prompt is untouched.
     beadhiveGroupFor: async (scope) => {
+      if (!configStore.getBeadhiveProjects()) return null;
       if (!scope.startsWith("group:")) return null;
       const id = projectIdFromGroupRef(scope.slice("group:".length));
       if (!id) return null;

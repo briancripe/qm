@@ -997,12 +997,15 @@ export async function shareArtifact(ctx: ApiCtx): Promise<void> {
 async function getSurfaceConfig(ctx: ApiCtx): Promise<void> {
   const { res, deps } = ctx;
   if (!deps.config) return sendJson(res, 404, { error: "not_found" });
-  const [webuiModels, baseModel, externalSlackParticipants, branding] = await Promise.all([
-    deps.config.getWebuiModelsDurable(orgScope(deps)),
-    deps.config.getBaseModelDurable(orgScope(deps)),
-    deps.config.getExternalSlackParticipantsDurable(orgScope(deps)),
-    deps.config.getBrandingDurable(orgScope(deps)),
-  ]);
+  const [webuiModels, baseModel, externalSlackParticipants, branding, beadhiveEnabled, beadhiveProjects] =
+    await Promise.all([
+      deps.config.getWebuiModelsDurable(orgScope(deps)),
+      deps.config.getBaseModelDurable(orgScope(deps)),
+      deps.config.getExternalSlackParticipantsDurable(orgScope(deps)),
+      deps.config.getBrandingDurable(orgScope(deps)),
+      deps.config.getBeadhiveEnabledDurable(),
+      deps.config.getBeadhiveProjectsDurable(),
+    ]);
   const harnessId = deps.harnessId ?? "pi";
   const managedKeys = deps.modelCredentials ? await deps.modelCredentials.availability() : null;
   const catalog = managedKeys?.openrouter
@@ -1058,6 +1061,8 @@ async function getSurfaceConfig(ctx: ApiCtx): Promise<void> {
         }
       : {}),
     externalSlackParticipants,
+    beadhiveEnabled,
+    beadhiveProjects,
     ...(Object.keys(resolvedBranding).length ? { branding: resolvedBranding } : {}),
   });
 }
