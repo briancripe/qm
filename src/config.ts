@@ -248,6 +248,7 @@ function awsSandboxEnv(env: NodeJS.ProcessEnv): AwsSandboxEnv {
 interface LocalSandboxEnv {
   image?: string;
   dockerBin?: string;
+  homeDir?: string;
   networkMode?: LocalSandboxNetworkMode;
   bindMounts?: LocalSandboxBindMount[];
   userns?: string;
@@ -300,12 +301,27 @@ function localSandboxEnvVarsStrict(env: NodeJS.ProcessEnv): Record<string, strin
   }
 }
 
+function localSandboxHomeDirStrict(env: NodeJS.ProcessEnv): string | undefined {
+  const raw = env.LOCAL_SANDBOX_HOME_DIR?.trim();
+  if (!raw) return undefined;
+  if (!raw.startsWith("/")) {
+    throw new Error(`LOCAL_SANDBOX_HOME_DIR must be an absolute path, got ${JSON.stringify(raw)}`);
+  }
+  const homeDir = raw.replace(/\/+$/, "");
+  if (!homeDir || ["/usr", "/etc", "/bin", "/sbin", "/lib", "/var", "/opt"].includes(homeDir)) {
+    throw new Error(`LOCAL_SANDBOX_HOME_DIR: refusing to mount the scope volume over ${raw}`);
+  }
+  return homeDir;
+}
+
 function localSandboxEnv(env: NodeJS.ProcessEnv): LocalSandboxEnv {
   const networkMode = localSandboxNetworkModeEnvStrict(env);
   const bindMounts = localSandboxBindMountsEnvStrict(env);
   const userns = env.LOCAL_SANDBOX_USERNS?.trim();
   const sandboxEnv = localSandboxEnvVarsStrict(env);
+  const homeDir = localSandboxHomeDirStrict(env);
   return {
+    ...(homeDir ? { homeDir } : {}),
     ...(bindMounts ? { bindMounts } : {}),
     ...(userns ? { userns } : {}),
     ...(sandboxEnv ? { env: sandboxEnv } : {}),
