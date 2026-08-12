@@ -19,15 +19,8 @@ const CLICK_GUARD_MS = 1_000;
 let lastClick = 0;
 let host: HTMLElement | null = null;
 
-function ensureHost(): HTMLElement {
-  const existing = document.getElementById(TRAY_ID);
-  if (existing) return existing;
-  const el = document.createElement("aside");
-  el.id = TRAY_ID;
-  el.className = "bh-tray";
-  el.setAttribute("aria-label", "Hive");
-  document.body.appendChild(el);
-  return el;
+function ensureHost(): HTMLElement | null {
+  return document.getElementById(TRAY_ID);
 }
 
 export function toggleHiveTray(): void {
@@ -121,6 +114,7 @@ function trayBody(snapshot: WorkSnapshot | null) {
 
 export function drawHiveTray(): void {
   host = ensureHost();
+  if (!host) return;
   host.classList.toggle("open", beadhiveState.trayOpen);
   host.hidden = !beadhiveState.enabled;
   if (!beadhiveState.enabled) {
@@ -135,10 +129,10 @@ export function drawHiveTray(): void {
         type="button"
         title="Show the hive"
         aria-label="Show the hive"
+        aria-expanded="false"
         @click=${toggleHiveTray}
       >
-        ${icon(PanelRightOpen, 16)}
-        <span class="bh-tray-launcher-label">Hive</span>
+        ${icon(PanelRightOpen, 17)}
         ${beadhiveState.snapshot ? html`<span class="bh-tray-launcher-count">${beadhiveState.snapshot.total}</span>` : nothing}
       </button>`,
       rail,

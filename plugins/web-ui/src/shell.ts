@@ -478,6 +478,7 @@ export function mountShell(): void {
         <section class="main" id="main" tabindex="-1">
           <div class="empty">Pick a conversation, or start a new chat.</div>
         </section>
+        <aside class="bh-tray" id="bh-tray" aria-label="Hive"></aside>
       </div>
     `,
     appEl as HTMLElement,

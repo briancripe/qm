@@ -6950,34 +6950,39 @@ h3.ambient-field-label {
   margin-top: 10px;
 }
 .bh-tray {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 40;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  width: var(--rail-w);
+  border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  pointer-events: none;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--secondary) 42%, var(--background));
+  transition: width 0.18s ease;
 }
-.bh-tray > * {
-  pointer-events: auto;
+.bh-tray[hidden] {
+  display: none;
 }
 .bh-tray.open {
-  width: min(360px, 92vw);
-  background: var(--background);
-  border-left: 1px solid var(--border);
+  width: min(360px, 42vw);
   overflow-y: auto;
 }
+@media (prefers-reduced-motion: reduce) {
+  .bh-tray {
+    transition: none;
+  }
+}
 .bh-tray-launcher {
-  margin: 12px 12px 0 auto;
+  margin: 10px auto 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 7px 11px;
+  gap: 4px;
+  padding: 7px 6px;
   font: inherit;
-  font-size: 12px;
+  font-size: 11px;
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-md);
   background: var(--background);
   color: var(--foreground);
   cursor: pointer;
@@ -6985,7 +6990,7 @@ h3.ambient-field-label {
 .bh-tray-launcher-count {
   background: var(--muted);
   border-radius: 999px;
-  padding: 1px 7px;
+  padding: 0 6px;
   font-variant-numeric: tabular-nums;
 }
 .bh-tray-head {
