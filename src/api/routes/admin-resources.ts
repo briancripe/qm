@@ -344,6 +344,40 @@ export const ADMIN_RESOURCES: readonly AdminResource[] = [
     ),
   },
   {
+    id: "beadhive-enabled",
+    kind: "boolean",
+    target: "org",
+    label:
+      "Beadhive integration org-wide: off means the deployment behaves as if the Beadhive layer were not installed, and its surfaces disappear.",
+    readKey: "beadhiveEnabled",
+    get: (deps, scope) => (parseScopeId(scope).kind === "org" ? deps.config!.getBeadhiveEnabled() : undefined),
+    apply: generic<boolean>(
+      (body, { scope }) => {
+        const bad = orgOnly(scope, "the Beadhive switch is org-wide");
+        if (bad) return bad;
+        return boolBody(body);
+      },
+      (deps, _scope, on) => deps.config!.setBeadhiveEnabled(on),
+    ),
+  },
+  {
+    id: "beadhive-projects",
+    kind: "boolean",
+    target: "org",
+    label:
+      "Beadhive hive groups as projects: on means hives reconcile into projects and an agent is told which group its scope stands for. Requires the Beadhive integration.",
+    readKey: "beadhiveProjects",
+    get: (deps, scope) => (parseScopeId(scope).kind === "org" ? deps.config!.getBeadhiveProjects() : undefined),
+    apply: generic<boolean>(
+      (body, { scope }) => {
+        const bad = orgOnly(scope, "the Beadhive project switch is org-wide");
+        if (bad) return bad;
+        return boolBody(body);
+      },
+      (deps, _scope, on) => deps.config!.setBeadhiveProjects(on),
+    ),
+  },
+  {
     id: "base-model",
     kind: "enum",
     target: "any",

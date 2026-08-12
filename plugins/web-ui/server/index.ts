@@ -916,6 +916,46 @@ const routeRequest = async (req: IncomingMessage, res: ServerResponse) => {
       return relay(res, r);
     }
 
+    if (method === "GET" && path === "/api/beadhive/layer") {
+      const r = await coreFetch("GET", "/v1/deployment-layer");
+      return relay(res, r);
+    }
+
+    if (method === "GET" && path === "/api/beadhive/tray") {
+      const scopeId = url.searchParams.get("scopeId") || `personal:${user}`;
+      const r = await coreFetch("GET", `/v1/beadhive/tray?scopeId=${encodeURIComponent(scopeId)}`);
+      return relay(res, r);
+    }
+
+    if (method === "POST" && path === "/api/beadhive/tray/refresh") {
+      const scopeId = url.searchParams.get("scopeId") || `personal:${user}`;
+      const r = await coreFetch("POST", "/v1/beadhive/tray/refresh", JSON.stringify({ scopeId }));
+      return relay(res, r);
+    }
+
+    if (method === "PUT" && path === "/api/beadhive/flags") {
+      let body: { resource?: unknown; on?: unknown };
+      try {
+        body = JSON.parse((await readBody(req)) || "{}") as { resource?: unknown; on?: unknown };
+      } catch {
+        return json(res, 400, { error: "bad_request" });
+      }
+      const resource = body.resource === "beadhive-projects" ? "beadhive-projects" : "beadhive-enabled";
+      if (typeof body.on !== "boolean")
+        return json(res, 400, { error: "bad_request", message: "on must be a boolean" });
+      const r = await coreFetch(
+        "PUT",
+        `/v1/admin/scopes/${encodeURIComponent(`org:${ORG}`)}/${resource}`,
+        JSON.stringify({ principalId: user, on: body.on }),
+      );
+      return relay(res, r);
+    }
+
+    if (method === "POST" && path === "/api/beadhive/sync") {
+      const r = await coreFetch("POST", "/v1/beadhive/sync", JSON.stringify({ principalId: user }));
+      return relay(res, r);
+    }
+
     if (method === "GET" && path === "/api/runtime-config") {
       const scopeId = url.searchParams.get("scopeId") || `personal:${user}`;
       const qs = new URLSearchParams({ principalId: user, scopeId });

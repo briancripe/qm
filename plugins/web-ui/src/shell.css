@@ -6859,3 +6859,227 @@ h3.ambient-field-label {
 .qm-tooltip.visible {
   opacity: 1;
 }
+
+.bh-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  margin: 0 0 14px;
+}
+.bh-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 10px;
+  color: var(--muted-foreground);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.bh-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 13px;
+}
+.bh-row-label {
+  min-width: 120px;
+  color: var(--muted-foreground);
+}
+.bh-row-value {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.bh-row-hint,
+.bh-note {
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.bh-note {
+  padding: 4px 0;
+}
+.bh-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+}
+.bh-toggle + .bh-toggle {
+  border-top: 1px solid var(--border);
+}
+.bh-toggle-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+.bh-toggle-desc {
+  font-size: 12px;
+  color: var(--muted-foreground);
+  margin-top: 2px;
+}
+.bh-switch {
+  flex: none;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--muted);
+  cursor: pointer;
+  padding: 0 3px;
+  display: flex;
+  align-items: center;
+  transition: background 0.15s ease;
+}
+.bh-switch[disabled] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.bh-switch.on {
+  background: var(--accent, var(--primary));
+  justify-content: flex-end;
+}
+.bh-switch-knob {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--background);
+}
+.bh-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.bh-tray {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+.bh-tray > * {
+  pointer-events: auto;
+}
+.bh-tray.open {
+  width: min(360px, 92vw);
+  background: var(--background);
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+}
+.bh-tray-launcher {
+  margin: 12px 12px 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 11px;
+  font: inherit;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--background);
+  color: var(--foreground);
+  cursor: pointer;
+}
+.bh-tray-launcher-count {
+  background: var(--muted);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-variant-numeric: tabular-nums;
+}
+.bh-tray-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 6px;
+}
+.bh-tray-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.bh-tray-actions {
+  display: flex;
+  gap: 4px;
+}
+.bh-tray-asof,
+.bh-tray-notice,
+.bh-tray-empty {
+  padding: 0 14px 10px;
+  font-size: 12px;
+  color: var(--muted-foreground);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.bh-tray-notice {
+  color: var(--foreground);
+}
+.bh-tray-body {
+  padding: 0 14px 20px;
+}
+.bh-hive + .bh-hive {
+  margin-top: 16px;
+}
+.bh-hive-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.bh-hive-name {
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.bh-hive-count,
+.bh-hive-empty,
+.bh-hive-error {
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.bh-hive-empty,
+.bh-hive-error {
+  padding: 8px 0;
+}
+.bh-hive-bad {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--dev-accent, var(--foreground));
+}
+.bh-beads {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.bh-bead {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.bh-bead-top {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.bh-bead-id {
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.bh-bead-flag {
+  font-size: 10px;
+  color: var(--muted-foreground);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 6px;
+}
+.bh-bead-title {
+  font-size: 12px;
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}

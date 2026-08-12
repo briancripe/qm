@@ -61,9 +61,12 @@ import { renderFiles } from "./files";
 import { clearConnectorNotice, noteConnectorResult, renderConnectors, resetKeychainState } from "./connectors";
 import { renderDeploys } from "./deploys";
 import { renderMemory, resetMemoryState } from "./memory";
+import { BEADHIVE_ICON, renderBeadhivePanel } from "./beadhive/panel";
+import { beadhiveState, loadBeadhiveFlags } from "./beadhive/state";
+import { drawHiveTray } from "./beadhive/tray";
 import { renderSkills } from "./skills";
 import { contextsState, ensureContexts, renderContexts, resetContextsState, resolveProjectScope } from "./contexts";
-import { appState, isView, type AuthMode, type Me, type View } from "./shell-state";
+import { appState, can, isView, type AuthMode, type Me, type View } from "./shell-state";
 import { trapDialogFocus } from "./dialog-focus";
 export { appState, can, type Me, type View } from "./shell-state";
 
@@ -417,6 +420,14 @@ function gateFor(mode: AuthMode, reason: "unauthenticated" | "not_allowed" | und
 
 export function mountShell(): void {
   applySavedSidebarWidth();
+  if (!beadhiveState.loadedFlags) {
+    void loadBeadhiveFlags()
+      .then(() => {
+        renderSidebarTop();
+        drawHiveTray();
+      })
+      .catch(() => undefined);
+  }
   const impersonatedBy = appState.me?.impersonatedBy ?? null;
   let banner: TemplateResult | null = null;
   if (impersonatedBy) banner = impersonationBanner(impersonatedBy);
@@ -530,6 +541,7 @@ export function renderSidebarTop(): void {
             ${navRow("files", ICON.files, "Files")} ${navRow("crons", ICON.crons, "Crons")}
             ${navRow("keychain", ICON.keychain, "Keychain")} ${navRow("deploys", ICON.deploys, "Apps")}
             ${navRow("memory", ICON.memory, "Memory")} ${navRow("skills", ICON.skills, "Skills")}
+            ${beadhiveState.enabled || can("admin") ? navRow("beadhive", BEADHIVE_ICON, "Beadhive") : nothing}
           `,
         )}
       </nav>
@@ -613,6 +625,9 @@ export function switchView(v: View): void {
     case "skills":
       void renderSkills();
       break;
+    case "beadhive":
+      void renderBeadhivePanel();
+      break;
   }
 }
 
@@ -643,6 +658,9 @@ function refreshActiveView(v: View): void {
       break;
     case "skills":
       void renderSkills();
+      break;
+    case "beadhive":
+      void renderBeadhivePanel();
       break;
   }
 }
