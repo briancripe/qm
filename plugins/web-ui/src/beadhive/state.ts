@@ -60,21 +60,21 @@ export function resetBeadhiveState(): void {
 }
 
 export async function loadBeadhiveFlags(): Promise<void> {
-  const config = await api<{ beadhiveEnabled?: boolean; beadhiveProjects?: boolean }>("/surface-config");
+  const config = await api<{ beadhiveEnabled?: boolean; beadhiveProjects?: boolean }>("/api/surface-config");
   beadhiveState.enabled = config.beadhiveEnabled === true;
   beadhiveState.projects = config.beadhiveProjects === true;
   beadhiveState.loadedFlags = true;
 }
 
 export async function setBeadhiveFlag(resource: "beadhive-enabled" | "beadhive-projects", on: boolean): Promise<void> {
-  await api("/beadhive/flags", { method: "PUT", body: JSON.stringify({ resource, on }) });
+  await api("/api/beadhive/flags", { method: "PUT", body: JSON.stringify({ resource, on }) });
   if (resource === "beadhive-enabled") beadhiveState.enabled = on;
   else beadhiveState.projects = on;
 }
 
 export async function fetchTray(scopeId?: string): Promise<WorkSnapshot | null> {
   const qs = scopeId ? `?scopeId=${encodeURIComponent(scopeId)}` : "";
-  const body = await api<{ snapshot: WorkSnapshot | null }>(`/projects/work${qs}`);
+  const body = await api<{ snapshot: WorkSnapshot | null }>(`/api/projects/work${qs}`);
   beadhiveState.snapshot = body.snapshot;
   return body.snapshot;
 }
@@ -88,7 +88,7 @@ export async function refreshTray(
     snapshot: WorkSnapshot | null;
     retryAfterMs?: number;
     message?: string;
-  }>(`/projects/work/refresh${qs}`, { method: "POST" });
+  }>(`/api/projects/work/refresh${qs}`, { method: "POST" });
   if (body.snapshot) beadhiveState.snapshot = body.snapshot;
   return body;
 }
@@ -101,12 +101,12 @@ export interface SyncResult {
 }
 
 export async function syncProjectProviders(): Promise<{ results: SyncResult[] }> {
-  return api("/projects/sync", { method: "POST" });
+  return api("/api/projects/sync", { method: "POST" });
 }
 
 export async function fetchLayerStatus(): Promise<LayerStatus | null> {
   try {
-    return await api<LayerStatus>("/beadhive/layer");
+    return await api<LayerStatus>("/api/beadhive/layer");
   } catch {
     return null;
   }
