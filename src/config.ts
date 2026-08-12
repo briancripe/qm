@@ -286,7 +286,7 @@ function localSandboxBindMountsEnvStrict(env: NodeJS.ProcessEnv): LocalSandboxBi
     const mounts = parseLocalSandboxBindMounts(raw);
     return mounts.length ? mounts : undefined;
   } catch (e) {
-    throw new Error(`LOCAL_SANDBOX_BIND_MOUNTS: ${e instanceof Error ? e.message : String(e)}`);
+    throw new Error(`LOCAL_SANDBOX_BIND_MOUNTS: ${e instanceof Error ? e.message : String(e)}`, { cause: e });
   }
 }
 
@@ -299,7 +299,7 @@ function localSandboxEnvVarsStrict(env: NodeJS.ProcessEnv): Record<string, strin
     const vars = parseLocalSandboxEnv(raw);
     return Object.keys(vars).length ? vars : undefined;
   } catch (e) {
-    throw new Error(`LOCAL_SANDBOX_ENV: ${e instanceof Error ? e.message : String(e)}`);
+    throw new Error(`LOCAL_SANDBOX_ENV: ${e instanceof Error ? e.message : String(e)}`, { cause: e });
   }
 }
 
