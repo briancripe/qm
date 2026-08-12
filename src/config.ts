@@ -41,6 +41,7 @@ export interface Config {
   securityPosture: SecurityPosture;
   beadhiveEnabled: boolean;
   beadhiveProjects: boolean;
+  beadhivePrepareCommand?: string;
   sandboxBackend: "aws" | "local" | "sprites";
   sandboxSecondaryBackend?: "aws" | "local" | "sprites";
   deployProvider: "docker" | "aws";
@@ -780,6 +781,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     securityPosture: securityPostureEnvStrict(env.HARNESS_SECURITY_POSTURE),
     beadhiveEnabled: boolEnvStrict("BH_ENABLED", env.BH_ENABLED) ?? false,
     beadhiveProjects: boolEnvStrict("BH_PROJECTS", env.BH_PROJECTS) ?? false,
+    ...(env.BH_PREPARE_COMMAND?.trim() ? { beadhivePrepareCommand: env.BH_PREPARE_COMMAND.trim() } : {}),
     securityScreenBackend,
     ...(securityScreenBackend === "proxy"
       ? {

@@ -7,7 +7,7 @@ import {
   failureMessage,
   readyCommand,
   shapeReadyBeads,
-  PREPARE_COMMAND,
+  prepareCommand,
   READY_TRUNCATED_EXIT,
 } from "../src/beadhive/work.ts";
 import type { ProjectWorkSnapshot } from "../src/projects/project-provider.ts";
@@ -224,5 +224,9 @@ test("the prepare step runs before any hive is read", async () => {
     workspacePath: "/home/bees/workspace",
     now: () => 0,
   }).catch(() => undefined);
-  assert.equal(seen[0], PREPARE_COMMAND, "Dolt and the setup check are ensured before the fleet is read");
+  assert.equal(
+    seen[0],
+    prepareCommand("/home/bees/.beadhive"),
+    "Dolt and the setup check are ensured before the fleet is read",
+  );
 });

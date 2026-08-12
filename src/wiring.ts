@@ -656,6 +656,7 @@ export function buildApp(
           bhHome: beadhiveHome,
           workspacePath: beadhiveWorkspace,
           enabled: () => configStore.getBeadhiveProjectsDurable(),
+          ...(config.beadhivePrepareCommand ? { prepare: config.beadhivePrepareCommand } : {}),
         })
       : undefined;
   const projectProviders = createProjectProviderRegistry(beadhiveProvider ? [beadhiveProvider] : []);

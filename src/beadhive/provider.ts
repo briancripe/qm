@@ -21,6 +21,7 @@ export interface BeadhiveProviderOptions {
   workspacePath: string;
   enabled: () => Promise<boolean>;
   now?: () => number;
+  prepare?: string;
 }
 
 const groupOf = (origin: ProjectBeadhiveOrigin): ProjectGroup => ({
@@ -79,6 +80,7 @@ export function createBeadhiveProvider(opts: BeadhiveProviderOptions): ProjectPr
         bhHome: opts.bhHome,
         workspacePath: opts.workspacePath,
         now,
+        ...(opts.prepare ? { prepare: opts.prepare } : {}),
       });
     },
   };

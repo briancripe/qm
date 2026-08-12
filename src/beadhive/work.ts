@@ -66,7 +66,12 @@ export function readyCommand(workspacePath: string, hive: BeadhiveHive): string 
   return `cd ${shq(hiveRepoPath(workspacePath, hive))} && bh work ready --json`;
 }
 
-export const PREPARE_COMMAND = "bd dolt start >/dev/null 2>&1 || true; bh setup check >/dev/null 2>&1 || true";
+export function prepareCommand(bhHome: string, override?: string): string {
+  const configured = override?.trim();
+  if (configured) return configured;
+  const hq = `${bhHome.replace(/\/+$/, "")}/hq`;
+  return `cd ${shq(hq)} && { bd dolt start >/dev/null 2>&1 || true; bh setup check >/dev/null 2>&1 || true; }`;
+}
 
 const WARNING_LINE = /^\s*(warning|note|hint)\b[:\s]/i;
 
@@ -132,11 +137,12 @@ export interface ScopeWorkOptions {
   bhHome: string;
   workspacePath: string;
   now: () => number;
+  prepare?: string;
 }
 
 export async function collectScopeWork(opts: ScopeWorkOptions): Promise<ProjectWorkSnapshot> {
   return withScopeExec(opts.sandbox, opts.scope, async (exec) => {
-    await exec(PREPARE_COMMAND);
+    await exec(prepareCommand(opts.bhHome, opts.prepare));
     const hives = await enumerateBeadhiveHives(exec, opts.bhHome);
     return collectBeadhiveWork({ exec, hives, workspacePath: opts.workspacePath, now: opts.now() });
   });
