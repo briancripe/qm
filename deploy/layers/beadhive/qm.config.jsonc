@@ -44,7 +44,27 @@
   // Non-secret env overrides, per service. HARNESS "pi" runs real agent turns
   // against the base model selected by "modelProvider" above. "mock" runs the
   // whole stack with fake turns and no model calls.
-  "env": { "core": { "HARNESS": "pi" } },
+  //
+  // BH_ENABLED / BH_PROJECTS are this layer's defaults for the two Beadhive
+  // switches. An administrator's durable override wins over both at runtime.
+  //
+  // The LOCAL_SANDBOX_* values describe the agent computer this layer builds:
+  // the image from sandbox/build.sh, a home the unprivileged agent owns, and
+  // read-only mounts of the credentials the seats authenticate with. The
+  // operator constraint for this layer is named volumes only, so the mounts are
+  // the deliberate exception and nothing else is lent in from the host.
+  "env": {
+    "core": {
+      "HARNESS": "claude",
+      "BH_ENABLED": "1",
+      "BH_PROJECTS": "1",
+      "SANDBOX_BACKEND": "local",
+      "LOCAL_SANDBOX_IMAGE": "qm-sandbox-beadhive:latest",
+      "LOCAL_SANDBOX_HOME_DIR": "/home/bees",
+      "LOCAL_SANDBOX_ENV": "GH_CONFIG_DIR=/home/bees/gh-config,BH_HOME=/home/bees/.beadhive,GIT_WORKSPACE=/home/bees/workspace",
+      "LOCAL_SANDBOX_BIND_MOUNTS": "/home/bees/.claude/.credentials.json:/home/bees/.claude/.credentials.json:ro,/home/bees/agent-credentials/gh:/home/bees/gh-config:ro,/home/bees/agent-credentials/ssh:/home/bees/.ssh:ro"
+    }
+  },
 
   // The Fly app agents execute in. The core boots the immutable sandbox image
   // recorded by `qm sandbox publish`.

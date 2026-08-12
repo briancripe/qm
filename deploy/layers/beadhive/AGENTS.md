@@ -64,3 +64,29 @@ Run every command from this directory.
 
 `npm exec qm -- help` lists everything else, including `sandbox build` and
 `rollback`.
+
+## Beadhive building a QM App
+
+A seat can already do this; nothing in the runtime is missing. QM's `publish`
+tool collects files from the agent's workspace, deploys them behind the portal
+at `/d/<slug>/`, and grants an audience — so a bead whose acceptance criteria
+are "an internal page showing X" can be delivered as a running app rather than
+a pull request. Since the owner app shell landed upstream, a published app also
+arrives with a version chip and a docked chat for iterating on it, which makes
+"deliver an app" a reviewable outcome rather than a URL handoff.
+
+Two things stand between that and a demo, and neither is Beadhive's.
+
+The portal serves `/d/*` only when `PORTAL_DEPLOYMENTS_ENABLED=1`. It is unset
+on the development instance, so a publish there succeeds and then 404s when
+opened. Set it on the portal before demonstrating this.
+
+There is no convention yet for which beads become apps. A seat needs to know
+when to reach for `publish` instead of a branch — a label, a bead type, or a
+line in the molecule's acceptance criteria — and what to record on the bead
+afterwards so a reviewer can find what shipped. Decide that before wiring it,
+because the wiring is trivial and the convention is what makes it repeatable.
+
+The layer's command policy governs `publish` like any other tool, so an
+organization that wants apps reviewed before they reach an audience can require
+approval on it without changing the seat.
