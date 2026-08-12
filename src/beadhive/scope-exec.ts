@@ -15,6 +15,6 @@ export async function withScopeExec<T>(
   try {
     return await fn((command) => sandbox.run(handle, command, { timeoutMs }));
   } finally {
-    await sandbox.teardown(handle, { destroy: true }).catch(swallowAs("beadhive: sandbox teardown", undefined));
+    await sandbox.teardown(handle).catch(swallowAs("beadhive: sandbox teardown", undefined));
   }
 }
