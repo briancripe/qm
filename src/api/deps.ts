@@ -111,6 +111,7 @@ export interface ServerDeps {
   channelPolicy?: ChannelPolicyStore;
   environments?: EnvironmentStore;
   deploymentLayer?: DeploymentLayerStore;
+  beadhiveHome?: string;
   brokeredServices?: () => readonly string[];
   deployDialTimeoutMs?: number;
   deployAppsDomain?: string;
