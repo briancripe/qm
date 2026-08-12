@@ -7,6 +7,8 @@ export interface ProjectGroup {
   origin: Record<string, string>;
 }
 
+export type ProjectWorkItemState = "ready" | "blocked" | "in_progress" | "needs_review";
+
 export interface ProjectWorkItem {
   id: string;
   title: string;
@@ -17,6 +19,9 @@ export interface ProjectWorkItem {
   updatedAt?: string;
   blockedBy: number;
   blocks: number;
+  parentId?: string;
+  state: ProjectWorkItemState;
+  container?: boolean;
 }
 
 export type ProjectWorkSourceState = "ok" | "truncated" | "failed";

@@ -7,11 +7,12 @@ import type { ScopeId } from "../types.ts";
 import type { ProjectWorkItem, ProjectWorkSnapshot, ProjectWorkSource } from "../projects/project-provider.ts";
 
 export const READY_TRUNCATED_EXIT = 3;
-export const WORK_ITEMS_PER_HIVE = 25;
+export const WORK_ITEMS_PER_HIVE = 300;
 export const BEADHIVE_PROVIDER_ID = "beadhive";
 
 interface RawBead {
   id?: unknown;
+  dependencies?: unknown;
   title?: unknown;
   status?: unknown;
   priority?: unknown;
@@ -25,35 +26,6 @@ interface RawBead {
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 
-export function shapeReadyBeads(
-  stdout: string,
-  limit = WORK_ITEMS_PER_HIVE,
-): { items: ProjectWorkItem[]; total: number } {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(stdout.trim() || "[]");
-  } catch {
-    return { items: [], total: 0 };
-  }
-  if (!Array.isArray(parsed)) return { items: [], total: 0 };
-  const items = parsed
-    .filter((b): b is RawBead => typeof b === "object" && b !== null)
-    .filter((b) => str(b.id))
-    .slice(0, limit)
-    .map((b) => ({
-      id: str(b.id),
-      title: str(b.title),
-      status: str(b.status),
-      priority: num(b.priority),
-      kind: str(b.issue_type),
-      ...(str(b.owner) ? { owner: str(b.owner) } : {}),
-      ...(str(b.updated_at) ? { updatedAt: str(b.updated_at) } : {}),
-      blockedBy: num(b.dependency_count),
-      blocks: num(b.dependent_count),
-    }));
-  return { items, total: parsed.length };
-}
-
 export function hiveKey(hive: BeadhiveHive): string {
   return `${hive.provider}/${hive.org}/${hive.repo}`;
 }
@@ -64,6 +36,87 @@ export function hiveRepoPath(workspacePath: string, hive: BeadhiveHive): string 
 
 export function readyCommand(workspacePath: string, hive: BeadhiveHive): string {
   return `cd ${shq(hiveRepoPath(workspacePath, hive))} && bh work ready --json`;
+}
+
+export function listCommand(workspacePath: string, hive: BeadhiveHive): string {
+  return `cd ${shq(hiveRepoPath(workspacePath, hive))} && bh work list --json`;
+}
+
+export function gateCommand(workspacePath: string, hive: BeadhiveHive): string {
+  return `cd ${shq(hiveRepoPath(workspacePath, hive))} && bd gate list --json`;
+}
+
+const CONTAINER_KINDS = new Set(["molecule", "epic"]);
+
+export function parentOf(id: string, known: ReadonlySet<string>): string | undefined {
+  const cut = id.lastIndexOf(".");
+  if (cut <= 0) return undefined;
+  const parent = id.slice(0, cut);
+  return known.has(parent) ? parent : undefined;
+}
+
+export function shapeTasks(
+  listStdout: string,
+  readyStdout: string,
+  gateStdout: string,
+  limit = WORK_ITEMS_PER_HIVE,
+): { items: ProjectWorkItem[]; total: number } {
+  const rows = parseRows(listStdout);
+  if (!rows.length) return { items: [], total: 0 };
+  const readyIds = new Set(parseRows(readyStdout).map((r) => str(r.id)));
+  const gatedIds = new Set(
+    parseRows(gateStdout)
+      .filter((r) => str(r.status) !== "closed")
+      .flatMap((r) => [str(r.id), ...(Array.isArray(r.dependencies) ? r.dependencies.map(str) : [])])
+      .filter(Boolean),
+  );
+  const known = new Set(rows.map((r) => str(r.id)).filter(Boolean));
+  const items = rows
+    .filter((r) => str(r.id))
+    .slice(0, limit)
+    .map((r) => {
+      const id = str(r.id);
+      const kind = str(r.issue_type);
+      const parent = parentOf(id, known);
+      return {
+        id,
+        title: str(r.title),
+        status: str(r.status),
+        priority: num(r.priority),
+        kind,
+        ...(str(r.owner) ? { owner: str(r.owner) } : {}),
+        ...(str(r.updated_at) ? { updatedAt: str(r.updated_at) } : {}),
+        blockedBy: num(r.dependency_count),
+        blocks: num(r.dependent_count),
+        ...(parent ? { parentId: parent } : {}),
+        state: taskState(id, str(r.status), readyIds, gatedIds, num(r.dependency_count)),
+        ...(CONTAINER_KINDS.has(kind) ? { container: true } : {}),
+      };
+    });
+  return { items, total: rows.length };
+}
+
+function taskState(
+  id: string,
+  status: string,
+  readyIds: ReadonlySet<string>,
+  gatedIds: ReadonlySet<string>,
+  blockedBy: number,
+): ProjectWorkItem["state"] {
+  if (gatedIds.has(id)) return "needs_review";
+  if (status === "in_progress") return "in_progress";
+  if (readyIds.has(id)) return "ready";
+  return blockedBy > 0 ? "blocked" : "ready";
+}
+
+function parseRows(stdout: string): RawBead[] {
+  try {
+    const parsed: unknown = JSON.parse(stdout.trim() || "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((b): b is RawBead => typeof b === "object" && b !== null);
+  } catch {
+    return [];
+  }
 }
 
 export function prepareCommand(bhHome: string, override?: string): string {
@@ -100,21 +153,17 @@ export async function collectBeadhiveWork(opts: CollectWorkOptions): Promise<Pro
   for (const hive of opts.hives) {
     const base = { key: hiveKey(hive), name: hive.repo };
     try {
-      const r = await opts.exec(readyCommand(opts.workspacePath, hive));
-      if (r.code !== 0 && r.code !== READY_TRUNCATED_EXIT) {
-        sources.push({
-          ...base,
-          state: "failed",
-          items: [],
-          total: 0,
-          error: failureMessage(r.stderr, r.code),
-        });
+      const list = await opts.exec(listCommand(opts.workspacePath, hive));
+      if (list.code !== 0 && list.code !== READY_TRUNCATED_EXIT) {
+        sources.push({ ...base, state: "failed", items: [], total: 0, error: failureMessage(list.stderr, list.code) });
         continue;
       }
-      const { items, total } = shapeReadyBeads(r.stdout, limit);
+      const ready = await opts.exec(readyCommand(opts.workspacePath, hive));
+      const gates = await opts.exec(gateCommand(opts.workspacePath, hive));
+      const { items, total } = shapeTasks(list.stdout, ready.stdout, gates.stdout, limit);
       sources.push({
         ...base,
-        state: r.code === READY_TRUNCATED_EXIT || total > items.length ? "truncated" : "ok",
+        state: total > items.length ? "truncated" : "ok",
         items,
         total,
       });

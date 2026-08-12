@@ -6,7 +6,8 @@ import {
   collectScopeWork,
   failureMessage,
   readyCommand,
-  shapeReadyBeads,
+  shapeTasks,
+  parentOf,
   prepareCommand,
   READY_TRUNCATED_EXIT,
 } from "../src/beadhive/work.ts";
@@ -33,7 +34,7 @@ const bead = (id: string, over: Record<string, unknown> = {}) => ({
 });
 
 test("shaping keeps what the tray renders and drops the kilobyte fields", () => {
-  const { items, total } = shapeReadyBeads(JSON.stringify([bead("bh-1")]));
+  const { items, total } = shapeTasks(JSON.stringify([bead("bh-1")]), "[]", "[]");
   assert.equal(total, 1);
   const only = items[0]!;
   assert.deepEqual(Object.keys(only).sort(), [
@@ -43,6 +44,7 @@ test("shaping keeps what the tray renders and drops the kilobyte fields", () => 
     "kind",
     "owner",
     "priority",
+    "state",
     "status",
     "title",
     "updatedAt",
@@ -54,15 +56,15 @@ test("shaping keeps what the tray renders and drops the kilobyte fields", () => 
 
 test("shaping caps the rows but reports the true total", () => {
   const raw = JSON.stringify(Array.from({ length: 86 }, (_, i) => bead(`bh-${i}`)));
-  const { items, total } = shapeReadyBeads(raw, 25);
+  const { items, total } = shapeTasks(raw, "[]", "[]", 25);
   assert.equal(items.length, 25);
   assert.equal(total, 86, "the count the operator sees is the real one, not the capped one");
 });
 
 test("malformed or non-array output yields nothing rather than throwing", () => {
-  assert.deepEqual(shapeReadyBeads("not json"), { items: [], total: 0 });
-  assert.deepEqual(shapeReadyBeads('{"error":"no beads project"}'), { items: [], total: 0 });
-  assert.deepEqual(shapeReadyBeads(""), { items: [], total: 0 });
+  assert.deepEqual(shapeTasks("not json", "[]", "[]"), { items: [], total: 0 });
+  assert.deepEqual(shapeTasks('{"error":"no beads project"}', "[]", "[]"), { items: [], total: 0 });
+  assert.deepEqual(shapeTasks("", "[]", "[]"), { items: [], total: 0 });
 });
 
 test("the ready command runs inside the hive's own checkout", () => {
@@ -74,14 +76,20 @@ test("the ready command runs inside the hive's own checkout", () => {
 
 test("exit 3 is a truncated read, not a failure", async () => {
   const snapshot = await collectBeadhiveWork({
-    exec: async () => ({ stdout: JSON.stringify([bead("bh-1")]), stderr: "", code: READY_TRUNCATED_EXIT }),
+    exec: async () => ({
+      stdout: JSON.stringify([bead("bh-1"), bead("bh-2")]),
+      stderr: "",
+      code: READY_TRUNCATED_EXIT,
+    }),
     hives: [HIVE],
     workspacePath: "/w",
     now: 1000,
+    itemsPerHive: 1,
   });
-  assert.equal(snapshot.sources[0]!.state, "truncated");
-  assert.equal(snapshot.sources[0]!.items.length, 1, "the beads it did return are still shown");
-  assert.equal(snapshot.reachedEvery, true, "a truncated hive was still reached");
+  assert.equal(snapshot.sources[0]!.state, "truncated", "capped rows report as truncated, never as failed");
+  assert.equal(snapshot.sources[0]!.items.length, 1, "the rows it did return are still shown");
+  assert.equal(snapshot.sources[0]!.total, 2, "the real count survives the cap");
+  assert.equal(snapshot.reachedEvery, true, "exit 3 on the listing is tolerated, not a failed hive");
 });
 
 test("one unreachable hive does not blank the others", async () => {
@@ -229,4 +237,44 @@ test("the prepare step runs before any hive is read", async () => {
     prepareCommand("/home/bees/.beadhive"),
     "Dolt and the setup check are ensured before the fleet is read",
   );
+});
+
+test("hierarchy comes from the dotted id, and only when the parent really exists", () => {
+  const known = new Set(["nvhack-d65", "nvhack-d65.3", "nvhack-rl5t"]);
+  assert.equal(parentOf("nvhack-d65.3", known), "nvhack-d65");
+  assert.equal(parentOf("nvhack-d65", known), undefined, "a root has no parent");
+  assert.equal(parentOf("nvhack-zzz.1", known), undefined, "an orphan is not forced under a missing parent");
+});
+
+test("state separates what needs a human from what is merely blocked", () => {
+  const list = JSON.stringify([
+    bead("nvhack-a", { status: "open", dependency_count: 0 }),
+    bead("nvhack-b", { status: "open", dependency_count: 2 }),
+    bead("nvhack-c", { status: "in_progress" }),
+    bead("nvhack-d", { status: "open" }),
+  ]);
+  const ready = JSON.stringify([bead("nvhack-a")]);
+  const gates = JSON.stringify([{ id: "gate-1", status: "open", dependencies: ["nvhack-d"] }]);
+  const byId = new Map(shapeTasks(list, ready, gates).items.map((i) => [i.id, i.state]));
+  assert.equal(byId.get("nvhack-a"), "ready");
+  assert.equal(byId.get("nvhack-b"), "blocked", "open dependencies and not in the ready set");
+  assert.equal(byId.get("nvhack-c"), "in_progress");
+  assert.equal(byId.get("nvhack-d"), "needs_review", "an open gate outranks every other state");
+});
+
+test("molecules and epics are marked as containers so the tree can group under them", () => {
+  const list = JSON.stringify([
+    bead("nvhack-d65", { issue_type: "molecule" }),
+    bead("nvhack-d65.1", { issue_type: "task" }),
+  ]);
+  const items = shapeTasks(list, "[]", "[]").items;
+  assert.equal(items[0]!.container, true);
+  assert.equal(items[1]!.container, undefined);
+  assert.equal(items[1]!.parentId, "nvhack-d65");
+});
+
+test("a closed gate does not mark its bead as needing review", () => {
+  const list = JSON.stringify([bead("nvhack-e", { dependency_count: 0 })]);
+  const gates = JSON.stringify([{ id: "g", status: "closed", dependencies: ["nvhack-e"] }]);
+  assert.equal(shapeTasks(list, "[]", gates).items[0]!.state, "ready");
 });
