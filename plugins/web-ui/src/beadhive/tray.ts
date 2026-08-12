@@ -13,6 +13,7 @@ import {
 } from "./state";
 import { buildTaskTree, countStates, descendantCount, findTask, type TaskNode } from "./tree";
 import { dispatchToChat } from "./dispatch";
+import { onboardingHint, summarizeFailures } from "./failure";
 import { activeGroupKey, filterToGroup, groupSourcesByProject } from "./scope";
 import { contextsState } from "../contexts";
 import { mainConversation } from "../conversations";
@@ -123,15 +124,6 @@ function taskRow(node: TaskNode, depth: number): TemplateResult {
 }
 
 function sourceBlock(source: WorkSource): TemplateResult {
-  if (source.state === "failed") {
-    return html`<section class="bh-source">
-      <header class="bh-source-head">
-        <span class="bh-source-name">${source.key}</span>
-        <span class="bh-source-bad">${icon(TriangleAlert, 12)} unreachable</span>
-      </header>
-      <div class="bh-source-error">${source.error}</div>
-    </section>`;
-  }
   const { roots } = buildTaskTree(source.items);
   return html`<section class="bh-source">
     <header class="bh-source-head">
@@ -194,7 +186,9 @@ function showEverything(): void {
 
 function projectSection(group: { key: string; sources: WorkSource[] }): TemplateResult {
   const collapsed = beadhiveState.collapsedGroups.has(group.key);
-  const total = group.sources.reduce((sum, s) => sum + s.total, 0);
+  const reachable = group.sources.filter((s) => s.state !== "failed");
+  const failures = summarizeFailures(group.sources);
+  const total = reachable.reduce((sum, s) => sum + s.total, 0);
   return html`<section class="bh-project">
     <button
       class="bh-project-head"
@@ -208,9 +202,26 @@ function projectSection(group: { key: string; sources: WorkSource[] }): Template
     >
       ${icon(collapsed ? ChevronRight : ChevronDown, 13)}
       <span class="bh-project-name">${group.key}</span>
-      <span class="bh-source-count">${total}</span>
+      ${reachable.length ? html`<span class="bh-source-count">${total}</span>` : nothing}
+      ${
+        failures.length
+          ? html`<span class="bh-source-bad" title=${failures.map((f) => `${f.reason}: ${f.detail}`).join("\n")}>
+              ${icon(TriangleAlert, 12)} ${failures.reduce((n, f) => n + f.count, 0)}
+            </span>`
+          : nothing
+      }
     </button>
-    ${collapsed ? nothing : group.sources.map(sourceBlock)}
+    ${
+      collapsed
+        ? nothing
+        : html`${reachable.map(sourceBlock)}
+          ${failures.map(
+              (f) =>
+                html`<div class="bh-source-error" title=${f.detail}>
+                  ${f.count} ${f.count === 1 ? "hive" : "hives"} ${f.reason}
+                </div>`,
+            )}`
+    }
   </section>`;
 }
 
@@ -231,7 +242,9 @@ function trayBody(): TemplateResult {
   const { shown, hiddenGroups } = filterToGroup(groupSourcesByProject(snapshot.sources), active);
   const visible = shown.flatMap((g) => g.sources);
   const needsReview = visible.flatMap((s) => buildTaskTree(s.items).needsReview);
+  const hint = onboardingHint(summarizeFailures(visible), visible.length);
   return html`
+    ${hint ? html`<div class="bh-tray-hint">${hint}</div>` : nothing}
     ${
       active && hiddenGroups
         ? html`<div class="bh-tray-filter">
