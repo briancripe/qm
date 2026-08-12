@@ -1,5 +1,7 @@
 import { api } from "../core-bridge";
 
+export type WorkItemState = "ready" | "blocked" | "in_progress" | "needs_review";
+
 export interface WorkItem {
   id: string;
   title: string;
@@ -10,6 +12,9 @@ export interface WorkItem {
   updatedAt?: string;
   blockedBy: number;
   blocks: number;
+  parentId?: string;
+  state: WorkItemState;
+  container?: boolean;
 }
 
 export interface WorkSource {
@@ -47,12 +52,16 @@ export const beadhiveState = {
   snapshot: null as WorkSnapshot | null,
   trayOpen: false,
   trayLoading: false,
+  expanded: new Set<string>(),
+  selectedId: "",
   notice: "",
   busy: false,
 };
 
 export function resetBeadhiveState(): void {
   beadhiveState.snapshot = null;
+  beadhiveState.expanded = new Set<string>();
+  beadhiveState.selectedId = "";
   beadhiveState.trayOpen = false;
   beadhiveState.trayLoading = false;
   beadhiveState.notice = "";
