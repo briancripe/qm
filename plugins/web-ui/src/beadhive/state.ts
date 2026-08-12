@@ -37,7 +37,7 @@ export interface LayerStatus {
   status?: "applied" | "degraded";
   runtimeContentHash?: string | null;
   source?: string;
-  resolved?: { tools?: Array<{ name?: string }>; skills?: Array<{ name?: string }> };
+  resolved?: { tools?: Array<{ id?: string; label?: string }>; skills?: Array<{ id?: string; label?: string }> };
 }
 
 export const beadhiveState = {

@@ -3,6 +3,7 @@ import { Boxes, RefreshCw } from "lucide";
 import { errMessage } from "../../../chassis/src/errors";
 import { icon } from "../ui";
 import { appState, can } from "../shell-state";
+import { layerState } from "./layer-state";
 import {
   asOfLabel,
   beadhiveState,
@@ -84,8 +85,10 @@ async function runSync(): Promise<void> {
 export function drawBeadhivePanel(): void {
   if (appState.currentView !== "beadhive" || !appState.mainEl) return;
   const snapshot = beadhiveState.snapshot;
-  const tools = layer?.resolved?.tools?.map((t) => t.name).filter(Boolean) ?? [];
-  const skills = layer?.resolved?.skills?.map((s) => s.name).filter(Boolean) ?? [];
+  const named = (entries?: Array<{ id?: string; label?: string }>): string[] =>
+    (entries ?? []).map((e) => e.label || e.id || "").filter(Boolean);
+  const tools = named(layer?.resolved?.tools);
+  const skills = named(layer?.resolved?.skills);
   const host = document.createElement("div");
   host.className = "pane";
   render(
@@ -130,13 +133,10 @@ export function drawBeadhivePanel(): void {
         ${
           layerLoaded && layer
             ? html`
-                ${statusRow(
-                  "Layer",
-                  layer.status ?? "unrecorded",
-                  layer.status === "degraded" ? "the running layer does not match what was published" : undefined,
-                )}
-                ${statusRow("Version", layer.version || "—")}
-                ${statusRow("Content hash", layer.contentHash ? layer.contentHash.slice(0, 12) : "—")}
+                ${statusRow("Layer", layerState(layer).label, layerState(layer).hint)}
+                ${statusRow("Source", layer.source ?? "—")}
+                ${layer.version ? statusRow("Version", layer.version) : nothing}
+                ${layer.contentHash ? statusRow("Content hash", layer.contentHash.slice(0, 12)) : nothing}
                 ${statusRow("Tools", tools.length ? tools.join(", ") : "none")}
                 ${statusRow("Skills", skills.length ? skills.join(", ") : "none")}
               `

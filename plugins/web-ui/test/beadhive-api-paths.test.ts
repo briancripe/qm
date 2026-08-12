@@ -16,3 +16,14 @@ test("every beadhive api() call carries the /api prefix", () => {
     );
   }
 });
+
+test("the layer's empty state never reads as a defect, and degraded always does", async () => {
+  const { layerState } = await import("../src/beadhive/layer-state.ts");
+  assert.equal(layerState({ version: 0, contentHash: null, source: "none" }).label, "not recorded");
+  assert.match(layerState({ version: 0, contentHash: null, source: "none" }).hint!, /not deployed with the qm CLI/);
+  assert.equal(layerState({ version: 0, contentHash: null, source: "filesystem" }).label, "loaded from disk");
+  assert.equal(layerState({ version: 7, contentHash: "abc", status: "applied" }).label, "applied");
+  const bad = layerState({ version: 7, contentHash: "abc", status: "degraded" });
+  assert.equal(bad.label, "degraded");
+  assert.match(bad.hint!, /does not match/, "the one state that should alarm an operator says why");
+});
