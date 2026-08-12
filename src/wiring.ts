@@ -24,6 +24,8 @@ import {
   type PersistedDeploymentIdentity,
 } from "./resolution/config-store.ts";
 import { createResolutionService } from "./resolution/resolution-service.ts";
+import { createTrayStore, type PersistedTraySnapshot, type TrayStore } from "./beadhive/tray-store.ts";
+import { collectScopeTray } from "./beadhive/tray.ts";
 import { createAclStore, type AclStore } from "./acl/acl-store.ts";
 import { createPostgresGrantStore } from "./acl/postgres-grant-store.ts";
 import { createSkillStore, type SkillStore, type Skill } from "./skills/skill-store.ts";
@@ -350,6 +352,7 @@ export interface BuiltApp {
   workspace: WorkspaceStore;
   memory: MemoryService;
   sandbox: Sandbox;
+  beadhiveTray?: TrayStore;
   advisoryLock: AdvisoryLock;
   sandboxMigration: SandboxMigrationRunner;
   blobTransfer: BlobTransferStore;
@@ -642,6 +645,22 @@ export function buildApp(
     defaultBackend: config.sandboxBackend,
     onError: sandboxOnError,
   });
+  const beadhiveHome = config.localSandbox.env?.BH_HOME;
+  const beadhiveWorkspace = config.localSandbox.env?.GIT_WORKSPACE;
+  const beadhiveTray =
+    beadhiveHome && beadhiveWorkspace
+      ? createTrayStore({
+          backing: artifactMap<PersistedTraySnapshot>("beadhive_tray_snapshots"),
+          collect: (scope) =>
+            collectScopeTray({
+              sandbox,
+              scope: scope as ScopeId,
+              bhHome: beadhiveHome,
+              workspacePath: beadhiveWorkspace,
+              now: () => Date.now(),
+            }),
+        })
+      : undefined;
   const sandboxMigration = createSandboxMigrationRunner({
     backends: sandboxBackends,
     routes: sandboxRoutes,
@@ -1492,6 +1511,7 @@ export function buildApp(
     ...(askResolution ? { fireAskResolution: askResolution } : {}),
     ...(dropResolution ? { fireDropResolution: dropResolution } : {}),
     sandbox,
+    ...(beadhiveTray ? { beadhiveTray } : {}),
     sandboxMigration,
     advisoryLock,
     blobTransfer,

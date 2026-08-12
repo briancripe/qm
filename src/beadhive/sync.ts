@@ -2,12 +2,12 @@ import type { Sandbox } from "../sandbox/sandbox.ts";
 import type { Project, ProjectBeadhiveOrigin } from "../projects/project-store.ts";
 import { scopeId, type ScopeId } from "../types.ts";
 import { beadhiveGroupsOf, enumerateBeadhiveHives } from "../projects/beadhive-hives.ts";
+import { withScopeExec } from "./scope-exec.ts";
 import {
   beadhiveGroupName,
   reconcileBeadhiveProjects,
   type BeadhiveReconcileResult,
 } from "../projects/beadhive-reconcile.ts";
-import { swallowAs } from "../util/errors.ts";
 
 export interface BeadhiveSyncOptions {
   sandbox: Sandbox;
@@ -27,9 +27,8 @@ export class BeadhiveSyncError extends Error {}
 
 export async function syncBeadhiveProjects(opts: BeadhiveSyncOptions): Promise<BeadhiveSyncResult> {
   const scope = opts.scope ?? scopeId("personal", opts.ownerId);
-  const handle = await opts.sandbox.provision([{ scopeId: scope, mountPath: "", mode: "rw" }]);
-  try {
-    const hives = await enumerateBeadhiveHives((cmd) => opts.sandbox.run(handle, cmd), opts.bhHome);
+  return withScopeExec(opts.sandbox, scope, async (exec) => {
+    const hives = await enumerateBeadhiveHives(exec, opts.bhHome);
     const groups = beadhiveGroupsOf(hives);
     const reconciled = await reconcileBeadhiveProjects({
       groups,
@@ -41,7 +40,5 @@ export async function syncBeadhiveProjects(opts: BeadhiveSyncOptions): Promise<B
       },
     });
     return { ...reconciled, hives: hives.length, groups: groups.length };
-  } finally {
-    await opts.sandbox.teardown(handle, { destroy: true }).catch(swallowAs("beadhive sync: teardown", undefined));
-  }
+  });
 }

@@ -58,6 +58,7 @@ const server = createServer(built.app, {
   brokeredServices: () => built.brokeredTools.map((tool) => tool.service),
   deploymentLayer: built.deploymentLayerStore,
   ...(config.localSandbox.env?.BH_HOME ? { beadhiveHome: config.localSandbox.env.BH_HOME } : {}),
+  ...(built.beadhiveTray ? { beadhiveTray: built.beadhiveTray } : {}),
   deployDialTimeoutMs: config.deployDialTimeoutMs,
   ...(config.awsDeploy.appsDomain ? { deployAppsDomain: config.awsDeploy.appsDomain } : {}),
   ...(config.awsDeploy.gateSecret ? { deployGateSecret: config.awsDeploy.gateSecret } : {}),
