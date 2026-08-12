@@ -27,11 +27,12 @@ ENV UV_TOOL_DIR=/opt/uv/tools \
     UV_PYTHON_DOWNLOADS=never \
     UV_LINK_MODE=copy
 
+ARG BEADHIVE_VERSION=0.11.0
+
 COPY vendor/ /tmp/vendor/
 
 RUN set -eux; \
-    wheel="$(ls /tmp/vendor/beadhive-*.whl | head -1)"; \
-    uv tool install "$wheel"; \
+    uv tool install "beadhive==${BEADHIVE_VERSION}"; \
     bh --version
 
 RUN set -eux; \
