@@ -108,6 +108,45 @@ export function parseLocalSandboxBindMounts(raw: string): LocalSandboxBindMount[
   return out;
 }
 
+export interface LocalSandboxVolumeMount {
+  volume: string;
+  containerPath: string;
+  readOnly: boolean;
+}
+
+const VOLUME_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
+const SHADOWABLE = ["/", "/usr", "/etc", "/bin", "/sbin", "/lib", "/var", "/opt"];
+
+export function parseLocalSandboxVolumeMounts(raw: string): LocalSandboxVolumeMount[] {
+  const out: LocalSandboxVolumeMount[] = [];
+  for (const entry of raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)) {
+    const parts = entry.split(":");
+    if (parts.length < 2 || parts.length > 3) {
+      throw new Error(`volume mount ${JSON.stringify(entry)} must be VOLUME:CONTAINER[:ro|:rw]`);
+    }
+    const [volume = "", containerPath = "", mode] = parts;
+    if (!VOLUME_NAME.test(volume)) {
+      throw new Error(
+        `volume mount ${JSON.stringify(entry)}: ${JSON.stringify(volume)} is not a volume name — bind mounts belong in LOCAL_SANDBOX_BIND_MOUNTS`,
+      );
+    }
+    if (!containerPath.startsWith("/")) {
+      throw new Error(`volume mount ${JSON.stringify(entry)}: the container path must be absolute`);
+    }
+    if (SHADOWABLE.includes(containerPath.replace(/\/+$/, ""))) {
+      throw new Error(`volume mount ${JSON.stringify(entry)}: refusing to mount over ${containerPath}`);
+    }
+    if (mode !== undefined && mode !== "ro" && mode !== "rw") {
+      throw new Error(`volume mount ${JSON.stringify(entry)}: mode must be "ro" or "rw"`);
+    }
+    out.push({ volume, containerPath, readOnly: mode === "ro" });
+  }
+  return out;
+}
+
 export interface SandboxHandle {
   id: string;
   rootDir: string;
@@ -170,6 +209,7 @@ export function visibleTools(tools: readonly string[]): string[] {
 
 export interface ProvisionOptions {
   env?: Record<string, string>;
+  volumes?: readonly LocalSandboxVolumeMount[];
   egress?: EgressPolicy;
   egressToken?: string;
   scratch?: { key: string };

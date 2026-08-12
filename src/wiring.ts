@@ -656,6 +656,12 @@ export function buildApp(
           bhHome: beadhiveHome,
           workspacePath: beadhiveWorkspace,
           enabled: () => configStore.getBeadhiveProjectsDurable(),
+          fleetMode: config.beadhiveFleetMode,
+          groupFor: async (scope) => {
+            if (!scope.startsWith("group:")) return null;
+            const id = projectIdFromGroupRef(scope.slice("group:".length));
+            return id ? ((await projects.get(id))?.beadhive ?? null) : null;
+          },
           ...(config.beadhivePrepareCommand ? { prepare: config.beadhivePrepareCommand } : {}),
         })
       : undefined;

@@ -24,6 +24,7 @@ import type {
   ExecResult,
   LocalSandboxBindMount,
   LocalSandboxNetworkMode,
+  LocalSandboxVolumeMount,
   ProvisionOptions,
   Sandbox,
   SandboxHandle,
@@ -52,6 +53,7 @@ export interface LocalSandboxOptions {
    * the agent can read and (unless ro) write.
    */
   bindMounts?: readonly LocalSandboxBindMount[];
+  volumeMounts?: readonly LocalSandboxVolumeMount[];
   /**
    * Passed through as `--userns=<value>` when set. Relevant only alongside
    * bindMounts: under a normal rootless subuid mapping, container root writes
@@ -142,6 +144,9 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
   const networkMode: LocalSandboxNetworkMode = opts.networkMode ?? "custom";
   const bindMounts: readonly LocalSandboxBindMount[] = opts.bindMounts ?? [];
   const bindMountArgs = bindMounts.flatMap((m) => ["-v", `${m.hostPath}:${m.containerPath}${m.readOnly ? ":ro" : ""}`]);
+  const volumeArgs = (mounts: readonly LocalSandboxVolumeMount[] = []): string[] =>
+    mounts.flatMap((m) => ["-v", `${m.volume}:${m.containerPath}${m.readOnly ? ":ro" : ""}`]);
+  const staticVolumeArgs = volumeArgs(opts.volumeMounts);
   // Only meaningful with bind mounts, and only valid where the runtime can map
   // more than one uid — see LocalSandboxOptions.userns.
   const usernsArgs = opts.userns ? ["--userns", opts.userns] : [];
@@ -325,7 +330,12 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
     return ["-p", `127.0.0.1:${await pickFreeLoopbackPort()}:${agentPort}`];
   }
 
-  async function runContainer(name: string, scope: string | undefined, withVolume: boolean): Promise<void> {
+  async function runContainer(
+    name: string,
+    scope: string | undefined,
+    withVolume: boolean,
+    extraVolumes: readonly LocalSandboxVolumeMount[] = [],
+  ): Promise<void> {
     const netArgs = await networkArgs(name);
     const args = [
       "run",
@@ -341,6 +351,8 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
       "agent_env=dev",
       ...netArgs,
       ...(withVolume && scope ? ["-v", `${localVolumeName(scope)}:${homeDir}`] : []),
+      ...staticVolumeArgs,
+      ...volumeArgs(extraVolumes),
       ...bindMountArgs,
       ...usernsArgs,
       ...envArgs,
@@ -356,7 +368,10 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
     await waitDaemon(name);
   }
 
-  async function ensureContainer(scope: string): Promise<{ name: string; coldStart: boolean }> {
+  async function ensureContainer(
+    scope: string,
+    extraVolumes: readonly LocalSandboxVolumeMount[] = [],
+  ): Promise<{ name: string; coldStart: boolean }> {
     return provisionQueue(scope, async () => {
       const imageId = await preflight();
       const name = localContainerName(scope);
@@ -374,7 +389,7 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
         const created = await dexec(["volume", "create", volume]);
         if (created.code !== 0) throw new Error(`docker volume create ${volume} failed: ${created.stderr.trim()}`);
       }
-      await runContainer(name, scope, true);
+      await runContainer(name, scope, true, extraVolumes);
       activeByContainer.set(name, (activeByContainer.get(name) ?? 0) + 1);
       return { name, coldStart: !hadVolume };
     });
@@ -458,7 +473,7 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
       const scratch = provOpts?.scratch;
       const writable = layers.find((l) => l.mode === "rw") ?? layers[0];
       const scope = writable?.scopeId ?? "default";
-      const body = scratch ? await ensureScratch(scratch.key) : await ensureContainer(scope);
+      const body = scratch ? await ensureScratch(scratch.key) : await ensureContainer(scope, provOpts?.volumes ?? []);
       const name = body.name;
 
       const env = provOpts?.env && Object.keys(provOpts.env).length ? provOpts.env : undefined;

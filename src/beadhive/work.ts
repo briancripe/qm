@@ -2,7 +2,7 @@ import { shq } from "../util/shell.ts";
 import { enumerateBeadhiveHives, type BeadhiveHive, type HiveExec } from "../projects/beadhive-hives.ts";
 import { errMessage } from "../util/errors.ts";
 import { withScopeExec } from "./scope-exec.ts";
-import type { Sandbox } from "../sandbox/sandbox.ts";
+import type { LocalSandboxVolumeMount, Sandbox } from "../sandbox/sandbox.ts";
 import type { ScopeId } from "../types.ts";
 import type { ProjectWorkItem, ProjectWorkSnapshot, ProjectWorkSource } from "../projects/project-provider.ts";
 
@@ -187,12 +187,18 @@ export interface ScopeWorkOptions {
   workspacePath: string;
   now: () => number;
   prepare?: string;
+  volumes?: readonly LocalSandboxVolumeMount[];
 }
 
 export async function collectScopeWork(opts: ScopeWorkOptions): Promise<ProjectWorkSnapshot> {
-  return withScopeExec(opts.sandbox, opts.scope, async (exec) => {
-    await exec(prepareCommand(opts.bhHome, opts.prepare));
-    const hives = await enumerateBeadhiveHives(exec, opts.bhHome);
-    return collectBeadhiveWork({ exec, hives, workspacePath: opts.workspacePath, now: opts.now() });
-  });
+  return withScopeExec(
+    opts.sandbox,
+    opts.scope,
+    async (exec) => {
+      await exec(prepareCommand(opts.bhHome, opts.prepare));
+      const hives = await enumerateBeadhiveHives(exec, opts.bhHome);
+      return collectBeadhiveWork({ exec, hives, workspacePath: opts.workspacePath, now: opts.now() });
+    },
+    opts.volumes?.length ? { volumes: opts.volumes } : {},
+  );
 }

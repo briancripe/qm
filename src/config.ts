@@ -16,10 +16,13 @@ import {
   LOCAL_SANDBOX_NETWORK_MODES,
   parseLocalSandboxBindMounts,
   parseLocalSandboxEnv,
+  parseLocalSandboxVolumeMounts,
   type LocalSandboxBindMount,
   type LocalSandboxNetworkMode,
+  type LocalSandboxVolumeMount,
 } from "./sandbox/sandbox.ts";
 import { slackPluginConfigFromEnv, type SlackPluginConfig } from "./slack/config.ts";
+import { isFleetMode, type FleetMode } from "./beadhive/fleet.ts";
 import {
   MODEL_PROVIDERS,
   defaultModelForProvider,
@@ -42,6 +45,7 @@ export interface Config {
   beadhiveEnabled: boolean;
   beadhiveProjects: boolean;
   beadhivePrepareCommand?: string;
+  beadhiveFleetMode: FleetMode;
   sandboxBackend: "aws" | "local" | "sprites";
   sandboxSecondaryBackend?: "aws" | "local" | "sprites";
   deployProvider: "docker" | "aws";
@@ -256,6 +260,7 @@ interface LocalSandboxEnv {
   homeDir?: string;
   networkMode?: LocalSandboxNetworkMode;
   bindMounts?: LocalSandboxBindMount[];
+  volumeMounts?: LocalSandboxVolumeMount[];
   userns?: string;
   env?: Record<string, string>;
   agentPort?: number;
@@ -306,6 +311,26 @@ function localSandboxEnvVarsStrict(env: NodeJS.ProcessEnv): Record<string, strin
   }
 }
 
+function beadhiveFleetModeStrict(env: NodeJS.ProcessEnv): FleetMode {
+  const raw = env.BH_FLEET_MODE?.trim();
+  if (!raw) return "scope";
+  if (!isFleetMode(raw)) {
+    throw new Error(`BH_FLEET_MODE=${JSON.stringify(raw)} is not recognized — use scope, group, or shared.`);
+  }
+  return raw;
+}
+
+function localSandboxVolumeMountsStrict(env: NodeJS.ProcessEnv): LocalSandboxVolumeMount[] | undefined {
+  const raw = env.LOCAL_SANDBOX_VOLUME_MOUNTS?.trim();
+  if (!raw) return undefined;
+  try {
+    const mounts = parseLocalSandboxVolumeMounts(raw);
+    return mounts.length ? mounts : undefined;
+  } catch (e) {
+    throw new Error(`LOCAL_SANDBOX_VOLUME_MOUNTS: ${e instanceof Error ? e.message : String(e)}`, { cause: e });
+  }
+}
+
 function localSandboxHomeDirStrict(env: NodeJS.ProcessEnv): string | undefined {
   const raw = env.LOCAL_SANDBOX_HOME_DIR?.trim();
   if (!raw) return undefined;
@@ -322,12 +347,14 @@ function localSandboxHomeDirStrict(env: NodeJS.ProcessEnv): string | undefined {
 function localSandboxEnv(env: NodeJS.ProcessEnv): LocalSandboxEnv {
   const networkMode = localSandboxNetworkModeEnvStrict(env);
   const bindMounts = localSandboxBindMountsEnvStrict(env);
+  const volumeMounts = localSandboxVolumeMountsStrict(env);
   const userns = env.LOCAL_SANDBOX_USERNS?.trim();
   const sandboxEnv = localSandboxEnvVarsStrict(env);
   const homeDir = localSandboxHomeDirStrict(env);
   return {
     ...(homeDir ? { homeDir } : {}),
     ...(bindMounts ? { bindMounts } : {}),
+    ...(volumeMounts ? { volumeMounts } : {}),
     ...(userns ? { userns } : {}),
     ...(sandboxEnv ? { env: sandboxEnv } : {}),
     ...(numEnvStrict("LOCAL_SANDBOX_AGENT_PORT", env.LOCAL_SANDBOX_AGENT_PORT) !== undefined
@@ -782,6 +809,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     beadhiveEnabled: boolEnvStrict("BH_ENABLED", env.BH_ENABLED) ?? false,
     beadhiveProjects: boolEnvStrict("BH_PROJECTS", env.BH_PROJECTS) ?? false,
     ...(env.BH_PREPARE_COMMAND?.trim() ? { beadhivePrepareCommand: env.BH_PREPARE_COMMAND.trim() } : {}),
+    beadhiveFleetMode: beadhiveFleetModeStrict(env),
     securityScreenBackend,
     ...(securityScreenBackend === "proxy"
       ? {
