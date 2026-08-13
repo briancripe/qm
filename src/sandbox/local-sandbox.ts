@@ -203,11 +203,18 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
     return preflightDone;
   }
 
-  async function containerState(name: string): Promise<{ running: boolean; imageId: string } | null> {
-    const r = await dexec(["inspect", "-f", "{{.State.Running}} {{.Image}}", name]);
+  async function containerState(
+    name: string,
+  ): Promise<{ running: boolean; imageId: string; volumes: Set<string> } | null> {
+    const r = await dexec([
+      "inspect",
+      "-f",
+      '{{.State.Running}} {{.Image}} {{range .Mounts}}{{if eq .Type "volume"}}{{.Name}},{{end}}{{end}}',
+      name,
+    ]);
     if (r.code !== 0) return null;
-    const [running = "", imageId = ""] = r.stdout.trim().split(/\s+/);
-    return { running: running === "true", imageId };
+    const [running = "", imageId = "", mounted = ""] = r.stdout.trim().split(/\s+/);
+    return { running: running === "true", imageId, volumes: new Set(mounted.split(",").filter(Boolean)) };
   }
 
   async function resolvePort(name: string): Promise<number> {
@@ -377,7 +384,11 @@ export function createLocalSandbox(workspace: WorkspaceStore, opts: LocalSandbox
       const name = localContainerName(scope);
       scopeByContainer.set(name, scope);
       const state = await containerState(name);
-      if (state && state.imageId === imageId) {
+      // A running container keeps whatever mounts it was created with, so a scope
+      // whose fleet volumes changed must be recreated rather than reused — otherwise
+      // the mode switch silently does nothing.
+      const mountsMatch = extraVolumes.every((v) => state?.volumes.has(v.volume));
+      if (state && state.imageId === imageId && mountsMatch) {
         if (!state.running) await startContainer(name);
         activeByContainer.set(name, (activeByContainer.get(name) ?? 0) + 1);
         return { name, coldStart: false };

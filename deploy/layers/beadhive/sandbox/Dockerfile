@@ -27,7 +27,7 @@ ENV UV_TOOL_DIR=/opt/uv/tools \
     UV_PYTHON_DOWNLOADS=never \
     UV_LINK_MODE=copy
 
-ARG BEADHIVE_VERSION=0.11.0
+ARG BEADHIVE_VERSION=0.11.2
 
 COPY vendor/ /tmp/vendor/
 
