@@ -58,6 +58,15 @@
       "HARNESS": "claude",
       "BH_ENABLED": "1",
       "BH_PROJECTS": "1",
+
+      // Where a scope's Beadhive fleet lives. Onboarding one costs a clone per
+      // hive, and a scope's sandbox starts empty, so "scope" (the default) pays
+      // that again for every chat. "group" gives each project group one shared
+      // volume: onboard once, and a scope still sees only its own group's hives.
+      // "shared" is one fleet for everything — what a real Beadhive host looks
+      // like, one HQ and many seats, at the cost of the isolation between scopes
+      // that QM otherwise keeps.
+      "BH_FLEET_MODE": "group",
       "SANDBOX_BACKEND": "local",
       "LOCAL_SANDBOX_IMAGE": "qm-sandbox-beadhive:latest",
       "LOCAL_SANDBOX_HOME_DIR": "/home/bees",
