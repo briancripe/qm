@@ -96,6 +96,7 @@ export function syncUrlFromState(): void {
   const sessionId = splitState.active ? null : (chatState.sessionId ?? chatState.rememberedSessionId);
   const next = deepLinkPath(UI_BASE, appState.currentView, sessionId, contextsState.selected);
   if (`${location.pathname}${location.search}` !== next) history.replaceState(null, "", next);
+  drawHiveTray();
 }
 
 const appEl = document.getElementById("app");
