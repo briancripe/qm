@@ -50,8 +50,35 @@ export function onboardCommand(ctx: Pick<OnboardContext, "workspacePath">, hive:
   return parts.join(" ");
 }
 
+export function workspaceToml(hives: readonly OnboardHive[]): string {
+  const groups = new Map<string, { provider: string; org: string; repos: string[] }>();
+  for (const hive of hives) {
+    const key = `${hive.provider}/${hive.org}`;
+    const existing = groups.get(key);
+    if (existing) existing.repos.push(hive.repo);
+    else groups.set(key, { provider: hive.provider, org: hive.org, repos: [hive.repo] });
+  }
+  return [...groups.values()]
+    .map((g) =>
+      [
+        "[[provider]]",
+        `provider = "${g.provider}"`,
+        `name = "${g.org}"`,
+        `path = "${g.provider}"`,
+        'env_var = "GITHUB_TOKEN"',
+        "skip_forks = true",
+        `include = [${g.repos.map((r) => `"${r}"`).join(", ")}]`,
+        "auth_http = false",
+        "exclude = []",
+        'url = "https://api.github.com/graphql"',
+      ].join("\n"),
+    )
+    .join("\n\n");
+}
+
 export function onboardingPlan(ctx: OnboardContext): OnboardStep[] {
   const hq = `${ctx.bhHome.replace(/\/+$/, "")}/hq`;
+  const wsToml = `${ctx.workspacePath.replace(/\/+$/, "")}/workspace.toml`;
   const steps: OnboardStep[] = [
     { id: "setup-check", title: "Check the toolchain", run: "bh setup check" },
     {
@@ -67,6 +94,12 @@ export function onboardingPlan(ctx: OnboardContext): OnboardStep[] {
       run: "bh hq init",
     },
   ];
+  steps.push({
+    id: "workspace-toml",
+    title: "Declare the repo groups for git-workspace",
+    probe: `test -s ${shq(wsToml)}`,
+    run: `mkdir -p ${shq(ctx.workspacePath)} && cat > ${shq(wsToml)} <<'QM_WORKSPACE_TOML'\n${workspaceToml(ctx.hives)}\nQM_WORKSPACE_TOML`,
+  });
   for (const hive of ctx.hives) {
     const triplet = `${hive.provider}/${hive.org}/${hive.repo}`;
     steps.push({
@@ -114,11 +147,9 @@ async function runStep(exec: HiveExec, step: OnboardStep): Promise<StepResult> {
       return { ...base, status: "satisfied" };
     }
     const r = await exec(step.run);
-    if (r.code !== 0) return { ...base, status: "failed", error: failureMessage(r.stderr || r.stdout, r.code) };
-    if (step.probe && (await exec(step.probe)).code !== 0) {
-      return { ...base, status: "failed", error: `${step.run} reported success but ${step.probe} still fails` };
-    }
-    return { ...base, status: "ran" };
+    const settled = step.probe ? (await exec(step.probe)).code === 0 : r.code === 0;
+    if (settled) return { ...base, status: "ran" };
+    return { ...base, status: "failed", error: failureMessage(r.stderr || r.stdout, r.code) };
   } catch (e) {
     return { ...base, status: "failed", error: errMessage(e) };
   }
